@@ -22,8 +22,30 @@ import { askScarlet, analyzeImage, parseFoodResponse, estimateMicroplastics } fr
 import {
   getChat, saveChat, addMeal, checkAndUpdateStreak,
   addPinned, saveRecipe, deleteRecipe, addMicroplastics,
-  getTheme,
+  getTheme, getCaloriesRemaining, getProteinConsumed, getProteinGoal,
+  getMicroplasticsToday,
 } from './utils/storage';
+
+function scheduleISTNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+  const notifications = [
+    { hour: 19, min: 0, title: 'Scarlet', body: () => `You have ${getCaloriesRemaining()} calories left today. Make them count.` },
+    { hour: 21, min: 0, title: 'Scarlet', body: () => { const rem = getProteinGoal() - getProteinConsumed(); return rem > 0 ? `You still need ${rem}g of protein today. Don't let me down.` : `Protein goal hit. Impressed.`; } },
+    { hour: 22, min: 0, title: 'Scarlet', body: () => { const mp = getMicroplasticsToday(); return `Today you consumed ~${mp.total} microplastic particles. Biggest culprit: ${mp.biggest || 'unknown'}.`; } },
+  ];
+  notifications.forEach(({ hour, min, title, body }) => {
+    const now = new Date();
+    const nowIST = new Date(now.getTime() + IST_OFFSET);
+    const fireIST = new Date(nowIST);
+    fireIST.setHours(hour, min, 0, 0);
+    if (fireIST <= nowIST) fireIST.setDate(fireIST.getDate() + 1);
+    const msUntil = fireIST - nowIST;
+    setTimeout(() => {
+      new Notification(title, { body: body(), icon: '/icon-192.png' });
+    }, msUntil);
+  });
+}
 
 export default function App() {
   const [tab, setTab] = useState('home');
@@ -34,6 +56,8 @@ export default function App() {
   const [showBarcode, setShowBarcode] = useState(false);
   const [theme, setTheme] = useState(getTheme());
   const [pendingFood, setPendingFood] = useState(null);
+  const [microplastics, setMicroplastics] = useState(() => getMicroplasticsToday());
+  const [showBodyUpload, setShowBodyUpload] = useState(false);
   const { isListening, isSpeaking, startListening, stopListening, speak, stopSpeaking } = useSpeech();
   const inputRef = useRef(null);
 
@@ -44,7 +68,9 @@ export default function App() {
   useEffect(() => {
     checkAndUpdateStreak();
     if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
+      Notification.requestPermission().then(() => scheduleISTNotifications());
+    } else if (Notification.permission === 'granted') {
+      scheduleISTNotifications();
     }
   }, []);
 
@@ -67,6 +93,12 @@ export default function App() {
 
   const sendMessage = useCallback(async (text, fromVoice = false) => {
     if (!text.trim()) return;
+    // Stop command — halt speech immediately
+    const stopWords = ['stop', 'stop talking', 'shut up', 'quiet', 'pause', 'shush'];
+    if (stopWords.includes(text.trim().toLowerCase())) {
+      stopSpeaking();
+      return;
+    }
     const userMsg = { role: 'user', content: text };
     const history = [...messages, userMsg];
     addMessage(userMsg);
@@ -105,7 +137,18 @@ export default function App() {
       setTyping(false);
       const parsed = parseFoodResponse(fullText);
 
-      if (parsed.isFoodData) {
+      if (parsed.isMealData) {
+        // Multi-item meal
+        const mealSummary = { name: parsed.name, calories: parsed.calories, protein: parsed.protein };
+        setPendingFood(mealSummary);
+        const breakdown = parsed.items?.map(i => `${i.name} ${i.grams}g — ${i.calories} kcal, ${i.protein}g protein`).join('\n') || '';
+        const display = `${breakdown}\n\nTotal: ${parsed.calories} kcal · ${parsed.protein}g protein`;
+        updateLastMessage(prev => ({
+          ...prev, content: fullText, displayText: display,
+          foodData: { ...mealSummary, isFoodData: true, breakdown: parsed.items },
+        }));
+        if (fromVoice) speak(`Total: ${parsed.calories} calories, ${parsed.protein} grams protein. Want me to log it?`);
+      } else if (parsed.isFoodData) {
         setPendingFood(parsed);
         updateLastMessage(prev => ({
           ...prev,
@@ -189,6 +232,7 @@ export default function App() {
     addPinned({ name: pendingFood.name, calories: pendingFood.calories, protein: pendingFood.protein || 0 });
     updateLastMessage(prev => ({ ...prev, foodData: { ...prev.foodData, logged: true } }));
     setPendingFood(null);
+    setMicroplastics(getMicroplasticsToday());
     checkAndUpdateStreak();
   }
 
@@ -239,13 +283,36 @@ export default function App() {
         {tab === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, margin: '0 auto' }}>
 
-            {/* Avatar + calories side by side */}
+            {/* Avatar + calories + body photo button */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <ScarletAvatar speaking={isSpeaking} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <ScarletAvatar speaking={isSpeaking} />
+                <button
+                  className="btn-neon"
+                  style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => setTab('body')}
+                  title="Add progress photo"
+                >📸 Photos</button>
+              </div>
               <div style={{ flex: 1 }}>
                 <CaloriesRemaining />
               </div>
             </div>
+
+            {/* Microplastics corner badge */}
+            {microplastics.total > 0 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 14px', borderRadius: 10,
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,143,171,0.15)',
+                fontSize: 11, color: 'var(--text2)',
+              }}>
+                <span style={{ fontSize: 14 }}>🧫</span>
+                <span>~{microplastics.total.toLocaleString()} microplastic particles today</span>
+                {microplastics.biggest && <span style={{ color: 'var(--neon)', marginLeft: 'auto' }}>{microplastics.biggest}</span>}
+              </div>
+            )}
 
             {/* Saved recipes bar */}
             <SavedRecipes />

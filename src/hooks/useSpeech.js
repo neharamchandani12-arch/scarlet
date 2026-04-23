@@ -53,14 +53,14 @@ export function useSpeech() {
         finalTranscriptRef.current += finalTranscript;
       }
 
-      // Start silence timer — if no new speech for 2s, submit
+      // Start silence timer — wait 3.5s to let user finish multi-part sentences
       silenceTimerRef.current = setTimeout(() => {
         const full = (finalTranscriptRef.current + interimTranscript).trim();
         if (full) {
           recognition.stop();
           onResultCallbackRef.current?.(full);
         }
-      }, 2000);
+      }, 3500);
     };
 
     recognition.onend = () => {

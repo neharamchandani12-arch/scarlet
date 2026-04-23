@@ -13,15 +13,20 @@ Personality:
 - Light flirty energy — earned compliments, gentle teasing
 - 1-3 sentences max unless they ask for detail
 - No filler phrases: no "Great question!", "Of course!", "Certainly!", "Absolutely!"
+- NEVER mention microplastics unless the user specifically asks about them
 
 Calorie tracking (when relevant):
-When you identify food from description or image, respond ONLY with this JSON — nothing else:
+
+Single food: respond ONLY with this JSON:
 {"type":"food","name":"Food Name","calories":000,"protein":00,"notes":"one brief punchy comment"}
+
+Multiple foods with quantities (e.g. "100g rice, 200g chicken, 1 egg"): respond ONLY with this JSON:
+{"type":"meal","name":"Meal name","items":[{"name":"Rice","grams":100,"calories":130,"protein":3},{"name":"Chicken","grams":200,"calories":330,"protein":62}],"calories":460,"protein":65,"notes":"brief comment"}
 
 For saving a recipe: {"type":"save_recipe","name":"Recipe Name","calories":000,"protein":00}
 For deleting a recipe: {"type":"delete_recipe","name":"Recipe Name"}
 
-Restaurant knowledge: You know approximate calories for most restaurants and cuisines. Give confident estimates with a brief range (e.g. "around 650-800 kcal"). Always mention protein if you know it.
+Restaurant knowledge: You know approximate calories for most restaurants and cuisines. Give confident estimates with a brief range. Always mention protein.
 
 For all non-food responses: reply as normal warm conversational text — no JSON.`;
 
@@ -98,17 +103,14 @@ export async function analyzeBodyPhoto(base64Image) {
 export function parseFoodResponse(text) {
   try {
     const trimmed = text.trim();
-    if (trimmed.startsWith('{')) {
-      const parsed = JSON.parse(trimmed);
+    const jsonStr = trimmed.startsWith('{') ? trimmed : (() => {
+      const m = text.match(/\{[\s\S]*\}/);
+      return m ? m[0] : null;
+    })();
+    if (jsonStr) {
+      const parsed = JSON.parse(jsonStr);
       if (parsed.type === 'food') return { isFoodData: true, ...parsed };
-      if (parsed.type === 'save_recipe') return { isRecipeAction: 'save', ...parsed };
-      if (parsed.type === 'delete_recipe') return { isRecipeAction: 'delete', ...parsed };
-    }
-    // Also try to find JSON embedded in text
-    const jsonMatch = text.match(/\{[^{}]*"type"\s*:\s*"(?:food|save_recipe|delete_recipe)"[^{}]*\}/s);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.type === 'food') return { isFoodData: true, ...parsed };
+      if (parsed.type === 'meal') return { isMealData: true, ...parsed };
       if (parsed.type === 'save_recipe') return { isRecipeAction: 'save', ...parsed };
       if (parsed.type === 'delete_recipe') return { isRecipeAction: 'delete', ...parsed };
     }
