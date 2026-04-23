@@ -18,7 +18,7 @@ import VoiceSettings from './components/VoiceSettings';
 import BodyProgress from './components/BodyProgress';
 
 import { useSpeech } from './hooks/useSpeech';
-import { askScarlet, analyzeImage, parseFoodResponse, estimateMicroplastics } from './hooks/useGroq';
+import { askScarlet, analyzeImage, parseFoodResponse, getStreamDisplayText, estimateMicroplastics } from './hooks/useGroq';
 import {
   getChat, saveChat, addMeal, checkAndUpdateStreak,
   addPinned, saveRecipe, deleteRecipe, addMicroplastics,
@@ -116,20 +116,22 @@ export default function App() {
       await askScarlet(apiMessages, (delta, full) => {
         fullText = full;
         const parsed = parseFoodResponse(full);
+        // During streaming: hide text if it looks like it's building toward JSON (avoids showing preamble)
+        const streamDisplay = parsed.isFoodData || parsed.isMealData
+          ? null
+          : getStreamDisplayText(full) ?? full;
         updateLastMessage(prev => ({
           ...prev,
           content: full,
-          displayText: parsed.isFoodData
-            ? parsed.notes || `${parsed.name}: ${parsed.calories} kcal, ${parsed.protein}g protein`
-            : full,
+          displayText: streamDisplay ?? prev.displayText ?? '',
         }));
 
-        // Auto-speak as soon as we have enough text (first sentence)
-        if (fromVoice && !speechStarted && !parsed.isFoodData) {
-          const sentences = full.match(/[^.!?]+[.!?]/g);
-          if (sentences && sentences.length >= 1 && full.length > 30) {
+        // Auto-speak after first complete sentence
+        if (fromVoice && !speechStarted && streamDisplay && streamDisplay.length > 30) {
+          const sentences = streamDisplay.match(/[^.!?]+[.!?]/g);
+          if (sentences && sentences.length >= 1) {
             speechStarted = true;
-            speak(full);
+            speak(streamDisplay);
           }
         }
       });
@@ -168,11 +170,10 @@ export default function App() {
         updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
         if (fromVoice && !speechStarted) speak(reply);
       } else {
-        // Speak full response if auto-speak didn't fire yet
-        if (fromVoice && !speechStarted) {
-          const cleanText = fullText.replace(/[*_`#]/g, '').trim();
-          if (cleanText) speak(cleanText);
-        }
+        // Clean final text — strip any JSON fragments or markdown
+        const cleanText = fullText.replace(/\{[\s\S]*\}/, '').replace(/[*_`#]/g, '').trim();
+        updateLastMessage(prev => ({ ...prev, displayText: cleanText || prev.displayText }));
+        if (fromVoice && !speechStarted && cleanText) speak(cleanText);
       }
     } catch (err) {
       setTyping(false);
