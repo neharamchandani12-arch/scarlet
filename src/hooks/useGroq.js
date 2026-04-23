@@ -31,7 +31,7 @@ export async function askScarlet(messages, onChunk) {
   const systemWithContext = SYSTEM_PROMPT + '\n\n' + context;
 
   const stream = await client.chat.completions.create({
-    model: 'llama-3.2-11b-vision-preview',
+    model: 'llama-3.3-70b-versatile',
     messages: [
       { role: 'system', content: systemWithContext },
       ...messages,
@@ -51,7 +51,7 @@ export async function askScarlet(messages, onChunk) {
 
 export async function analyzeImage(base64Image, prompt = 'What food is this? Give me calories and protein.') {
   const response = await client.chat.completions.create({
-    model: 'llama-3.2-11b-vision-preview',
+    model: 'llama-3.2-90b-vision-preview',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildContext() },
       {
@@ -69,7 +69,7 @@ export async function analyzeImage(base64Image, prompt = 'What food is this? Giv
 
 export async function analyzeBodyPhoto(base64Image) {
   const response = await client.chat.completions.create({
-    model: 'llama-3.2-11b-vision-preview',
+    model: 'llama-3.2-90b-vision-preview',
     messages: [
       { role: 'system', content: 'You are Scarlet — direct, honest, encouraging but real. Give a brief honest assessment of visible body composition and progress. No fluff, no excessive compliments. 2-3 sentences max.' },
       {
