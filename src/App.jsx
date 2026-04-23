@@ -58,6 +58,16 @@ export default function App() {
   const [showBodyUpload, setShowBodyUpload] = useState(false);
   const { isListening, isSpeaking, startListening, stopListening, speak, stopSpeaking } = useSpeech();
   const inputRef = useRef(null);
+  const audioUnlockedRef = useRef(false);
+
+  // Unlock browser audio on first user interaction so speech plays after async delays
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      ctx.resume().then(() => { ctx.close(); audioUnlockedRef.current = true; });
+    } catch {}
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -371,13 +381,13 @@ export default function App() {
                 <input
                   ref={inputRef}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
+                  onChange={e => { unlockAudio(); setInput(e.target.value); }}
+                  onKeyDown={e => { unlockAudio(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
                   placeholder="Ask Scarlet anything..."
                   style={{ flex: 1 }}
                   disabled={typing}
                 />
-                <MicButton isListening={isListening} isSpeaking={isSpeaking} onClick={handleMic} disabled={typing} />
+                <MicButton isListening={isListening} isSpeaking={isSpeaking} onClick={() => { unlockAudio(); handleMic(); }} disabled={typing} />
               </div>
             </div>
           </div>

@@ -77,8 +77,13 @@ RULES for nutrition:
 - Only meat, fish, eggs, dairy, legumes, and protein powders are high protein
 
 MICROPLASTICS (answer confidently when asked — this IS your expertise):
-Approximate microplastic particles per serving: Bottled water 200-300/L. Seafood/shellfish 100-200/100g. Fish (farmed) 80-150/100g. Sea salt 50-100/tsp. Beer 50-100/bottle. Honey 40-80/serving. Canned food 40-80/serving. Ultra-processed/packaged food 30-60/serving. Tea (plastic teabag) 10,000+/cup. Chicken 10-20/100g. Beef/meat 5-15/100g. Rice/pasta/bread 5-10/serving. Coffee 20-30/cup. Fresh fruit/veg 3-8/serving. Eggs 2-5/egg. Home-cooked whole food 2-5/serving.
-Give ranges, name the biggest contributor, and be matter-of-fact about it.
+CRITICAL RULE: ALL food absorbs microplastics from its packaging. Even "fresh" food sits in plastic wrap, plastic bags, or plastic-lined cartons. Factor this in for EVERY food item.
+
+Packaging-adjusted estimates (particles per serving, including absorption from plastic contact):
+Bottled water 250-350/L (plastic bottle leaches directly). Seafood/shellfish 180-250/100g (ocean + plastic packaging). Fish 140-200/100g (ocean + plastic wrap). Canned food 80-120/serving (plastic/BPA can lining). Ultra-processed snacks in plastic bags 90-130/serving. Tea in plastic teabag 10,000+/cup. Coffee pod/capsule (Nespresso etc) 150-200/cup. Regular coffee 50-80/cup. Beer/soda in plastic-lined can 80-100/bottle. Chicken on plastic supermarket tray 60-90/100g. Beef/lamb in plastic wrap 50-80/100g. Rice in plastic bag 40-60/serving. Pasta in plastic bag 35-55/serving. Bread in plastic wrap 35-50/serving. Fresh vegetables in plastic bag 30-50/serving. Fresh fruit with wax coating or plastic wrap 30-45/serving. Eggs in plastic/styrofoam carton 25-40/egg. Restaurant takeaway in plastic containers 70-110/serving. Home-cooked with fresh whole ingredients (minimal plastic contact) 15-30/serving.
+
+KEY INSIGHT: Heating food in plastic containers multiplies leaching by 10-100x. Fat-rich foods absorb more plastics. The longer food sits in plastic packaging, the more it absorbs.
+Give ranges, name the biggest contributor, be matter-of-fact and direct.
 
 ━━━ FOOD TRACKING (CRITICAL — read carefully) ━━━
 
@@ -199,20 +204,31 @@ export function getStreamDisplayText(full) {
 
 export function estimateMicroplastics(foodName) {
   const name = foodName.toLowerCase();
-  if (name.includes('seafood') || name.includes('shellfish') || name.includes('shrimp') || name.includes('prawn')) return 150;
-  if (name.includes('fish') || name.includes('salmon') || name.includes('tuna')) return 100;
-  if (name.includes('bottled water') || name.includes('water bottle')) return 250;
-  if (name.includes('salt')) return 75;
-  if (name.includes('beer')) return 75;
-  if (name.includes('honey')) return 60;
-  if (name.includes('canned') || name.includes('tin')) return 60;
-  if (name.includes('packaged') || name.includes('processed') || name.includes('chips')) return 50;
-  if (name.includes('tea')) return 35;
-  if (name.includes('coffee')) return 25;
-  if (name.includes('chicken')) return 15;
-  if (name.includes('beef') || name.includes('meat') || name.includes('lamb')) return 10;
-  if (name.includes('rice') || name.includes('pasta') || name.includes('bread')) return 8;
-  if (name.includes('fruit') || name.includes('vegetable') || name.includes('salad') || name.includes('apple') || name.includes('banana')) return 5;
-  if (name.includes('egg')) return 4;
-  return 20;
+  // All values include packaging absorption — food sitting in plastic absorbs particles
+  if (name.includes('bottled water') || name.includes('water bottle')) return 300;
+  if (name.includes('seafood') || name.includes('shellfish') || name.includes('shrimp') || name.includes('prawn')) return 220;
+  if (name.includes('fish') || name.includes('salmon') || name.includes('tuna')) return 170;
+  if (name.includes('nespresso') || name.includes('pod') || name.includes('capsule')) return 180;
+  if (name.includes('canned') || name.includes('tin')) return 100; // BPA can lining
+  if (name.includes('chips') || name.includes('crisps') || name.includes('instant') || name.includes('noodle')) return 110;
+  if (name.includes('packaged') || name.includes('processed')) return 95;
+  if (name.includes('tea') && (name.includes('bag') || name.includes('teabag'))) return 10000;
+  if (name.includes('tea')) return 80;
+  if (name.includes('coffee')) return 65;
+  if (name.includes('beer') || name.includes('soda') || name.includes('cola')) return 90;
+  if (name.includes('salt')) return 85;
+  if (name.includes('honey')) return 75;
+  if (name.includes('takeaway') || name.includes('takeout') || name.includes('delivery')) return 95;
+  if (name.includes('chicken')) return 75; // plastic supermarket tray
+  if (name.includes('beef') || name.includes('meat') || name.includes('lamb') || name.includes('pork')) return 65;
+  if (name.includes('rice') || name.includes('pasta')) return 50;
+  if (name.includes('bread') || name.includes('roti') || name.includes('naan') || name.includes('paratha')) return 45;
+  if (name.includes('dosa') || name.includes('idli') || name.includes('vada') || name.includes('upma') || name.includes('poha')) return 40;
+  if (name.includes('fruit') || name.includes('apple') || name.includes('banana') || name.includes('mango')) return 38;
+  if (name.includes('vegetable') || name.includes('salad') || name.includes('sabzi')) return 35;
+  if (name.includes('egg')) return 32;
+  if (name.includes('dal') || name.includes('lentil') || name.includes('curry')) return 45;
+  if (name.includes('paneer') || name.includes('cheese')) return 55;
+  if (name.includes('milk') || name.includes('yogurt') || name.includes('curd') || name.includes('dahi')) return 50;
+  return 50; // default: all food has plastic packaging contact
 }

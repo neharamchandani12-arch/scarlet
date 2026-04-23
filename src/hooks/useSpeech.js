@@ -174,13 +174,18 @@ export function useSpeech() {
           const audio = new Audio(url);
           audio.volume = getVolume();
           elAudioRef.current = audio;
-          const cleanup = () => { URL.revokeObjectURL(url); elAudioRef.current = null; setIsSpeaking(false); onEnd?.(); };
-          audio.onended = cleanup;
-          audio.onerror = cleanup;
-          audio.play().catch(cleanup);
+          const done = () => { URL.revokeObjectURL(url); elAudioRef.current = null; setIsSpeaking(false); onEnd?.(); };
+          audio.onended = done;
+          audio.onerror = () => { URL.revokeObjectURL(url); elAudioRef.current = null; setIsSpeaking(false); speakWebSpeech(clean, onEnd); };
+          audio.play().catch(() => {
+            // Autoplay blocked — fall back to Web Speech API
+            URL.revokeObjectURL(url);
+            elAudioRef.current = null;
+            setIsSpeaking(false);
+            speakWebSpeech(clean, onEnd);
+          });
         })
         .catch(() => {
-          // ElevenLabs failed (quota exceeded, network, etc.) — fall back to browser TTS
           setIsSpeaking(false);
           speakWebSpeech(clean, onEnd);
         });
