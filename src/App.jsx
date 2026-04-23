@@ -136,38 +136,29 @@ export default function App() {
       setTyping(false);
       const parsed = parseFoodResponse(fullText);
 
-      // Helper — text and audio always use the same string
-      const say = (text) => { updateLastMessage(prev => ({ ...prev, displayText: text })); speak(text); };
+      // say() — sets display text and speaks the exact same string
+      const say = (text) => {
+        updateLastMessage(prev => ({ ...prev, displayText: text }));
+        try { speak(text); } catch (e) { console.error('speak error', e); }
+      };
+
+      const logFood = (name, calories, protein) => {
+        addMeal({ name, calories, protein: protein || 0 });
+        addMicroplastics(name, estimateMicroplastics(name));
+        addPinned({ name, calories, protein: protein || 0 });
+        setMicroplastics(getMicroplasticsToday());
+        checkAndUpdateStreak();
+      };
 
       if (parsed.isMealData) {
         const mealSummary = { name: parsed.name, calories: parsed.calories, protein: parsed.protein };
-        if (fromVoice) {
-          addMeal(mealSummary);
-          addMicroplastics(mealSummary.name, estimateMicroplastics(mealSummary.name));
-          addPinned(mealSummary);
-          setMicroplastics(getMicroplasticsToday());
-          checkAndUpdateStreak();
-          updateLastMessage(prev => ({ ...prev, foodData: { ...mealSummary, isFoodData: true, logged: true } }));
-          say(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
-        } else {
-          setPendingFood(mealSummary);
-          updateLastMessage(prev => ({ ...prev, foodData: { ...mealSummary, isFoodData: true } }));
-          say(`${parsed.name} — ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
-        }
+        logFood(mealSummary.name, mealSummary.calories, mealSummary.protein);
+        updateLastMessage(prev => ({ ...prev, foodData: { ...mealSummary, isFoodData: true, logged: true } }));
+        say(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
       } else if (parsed.isFoodData) {
-        if (fromVoice) {
-          addMeal({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
-          addMicroplastics(parsed.name, estimateMicroplastics(parsed.name));
-          addPinned({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
-          setMicroplastics(getMicroplasticsToday());
-          checkAndUpdateStreak();
-          updateLastMessage(prev => ({ ...prev, foodData: { ...parsed, logged: true } }));
-          say(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
-        } else {
-          setPendingFood(parsed);
-          updateLastMessage(prev => ({ ...prev, foodData: parsed }));
-          say(`${parsed.name} — ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
-        }
+        logFood(parsed.name, parsed.calories, parsed.protein);
+        updateLastMessage(prev => ({ ...prev, foodData: { ...parsed, logged: true } }));
+        say(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
       } else if (parsed.isRecipeAction === 'save') {
         saveRecipe({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
         say(`Saved ${parsed.name} as a recipe. ${parsed.calories} calories, ${parsed.protein || 0} grams protein. Tap it above to log anytime.`);
@@ -181,8 +172,10 @@ export default function App() {
       }
     } catch (err) {
       setTyping(false);
-      const errMsg = 'Something went wrong. Try again.';
-      updateLastMessage(prev => ({ ...prev, content: errMsg, displayText: errMsg }));
+      const msg = err?.status === 429 ? 'Rate limit hit — wait a moment and try again.'
+        : err?.status === 401 ? 'API key error — check Vercel environment variables.'
+        : `Error: ${err?.message || err?.toString() || 'unknown'}. Try again.`;
+      updateLastMessage(prev => ({ ...prev, content: msg, displayText: msg }));
     }
   }, [messages, addMessage, updateLastMessage, speak]);
 
@@ -305,15 +298,20 @@ export default function App() {
         {tab === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, margin: '0 auto' }}>
 
-            {/* Calories + body analysis button */}
-            <div style={{ position: 'relative' }}>
-              <CaloriesRemaining />
-              <button
-                className="btn-neon"
-                style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, padding: '4px 10px' }}
-                onClick={() => setTab('body')}
-              >📸 Body</button>
-            </div>
+            <CaloriesRemaining />
+
+            {/* Body Analysis button — always visible */}
+            <button
+              className="btn-neon"
+              style={{ width: '100%', padding: '10px 14px', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10 }}
+              onClick={() => setTab('body')}
+            >
+              <span style={{ fontSize: 18 }}>📸</span>
+              <span>
+                <span style={{ fontWeight: 700, letterSpacing: 1 }}>BODY ANALYSIS</span>
+                <span style={{ color: 'var(--text2)', marginLeft: 8, fontSize: 10, textTransform: 'none', letterSpacing: 0 }}>upload a photo for Scarlet's assessment</span>
+              </span>
+            </button>
 
             {/* Microplastics tracker — always visible */}
             <div style={{
@@ -342,13 +340,6 @@ export default function App() {
             {/* Chat card */}
             <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', minHeight: 280, maxHeight: '55vh' }}>
               <ChatHistory messages={messages} typing={typing} />
-
-              {/* Log food button */}
-              {pendingFood && (
-                <button className="btn-solid" style={{ marginBottom: 10, fontSize: 13 }} onClick={logPendingFood}>
-                  + Log {pendingFood.name} ({pendingFood.calories} kcal)
-                </button>
-              )}
 
               {/* Waveform while listening/speaking */}
               {(isListening || isSpeaking) && (
@@ -421,6 +412,23 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Corner wave — loud animated bars bottom-right when active */}
+      {(isListening || isSpeaking) && (
+        <div className="corner-wave">
+          {[55, 90, 70, 100, 60, 85, 45, 75, 95, 65].map((peak, i) => (
+            <div
+              key={i}
+              className={`corner-wave-bar ${isSpeaking ? 'speaking' : 'listening'}`}
+              style={{
+                '--peak': `${peak}px`,
+                animationDelay: `${i * 0.08}s`,
+                animationDuration: `${0.55 + (i % 3) * 0.12}s`,
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {showCamera && <CameraCapture onCapture={handleCameraResult} onClose={() => setShowCamera(false)} />}
       {showBarcode && <BarcodeScanner onResult={handleBarcodeResult} onClose={() => setShowBarcode(false)} />}
