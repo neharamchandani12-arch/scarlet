@@ -136,52 +136,48 @@ export default function App() {
       setTyping(false);
       const parsed = parseFoodResponse(fullText);
 
+      // Helper — text and audio always use the same string
+      const say = (text) => { updateLastMessage(prev => ({ ...prev, displayText: text })); speak(text); };
+
       if (parsed.isMealData) {
         const mealSummary = { name: parsed.name, calories: parsed.calories, protein: parsed.protein };
-        const breakdown = parsed.items?.map(i => `${i.name}${i.grams ? ' ' + i.grams + 'g' : ''} — ${i.calories} kcal · ${i.protein}g protein`).join('\n') || '';
-        const display = `${breakdown}\n\nTotal: ${parsed.calories} kcal · ${parsed.protein}g protein\n${parsed.notes || ''}`;
         if (fromVoice) {
           addMeal(mealSummary);
           addMicroplastics(mealSummary.name, estimateMicroplastics(mealSummary.name));
           addPinned(mealSummary);
           setMicroplastics(getMicroplasticsToday());
           checkAndUpdateStreak();
-          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display.trim() + '\n\n✓ Logged', foodData: { ...mealSummary, isFoodData: true, logged: true } }));
-          speak(`Logged. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
+          updateLastMessage(prev => ({ ...prev, foodData: { ...mealSummary, isFoodData: true, logged: true } }));
+          say(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
         } else {
           setPendingFood(mealSummary);
-          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display.trim(), foodData: { ...mealSummary, isFoodData: true } }));
-          speak(`${parsed.name}. Total ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
+          updateLastMessage(prev => ({ ...prev, foodData: { ...mealSummary, isFoodData: true } }));
+          say(`${parsed.name} — ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
         }
       } else if (parsed.isFoodData) {
-        const display = `${parsed.name}: ${parsed.calories} kcal · ${parsed.protein}g protein${parsed.notes ? '\n' + parsed.notes : ''}`;
         if (fromVoice) {
           addMeal({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
           addMicroplastics(parsed.name, estimateMicroplastics(parsed.name));
           addPinned({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
           setMicroplastics(getMicroplasticsToday());
           checkAndUpdateStreak();
-          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display + '\n\n✓ Logged', foodData: { ...parsed, logged: true } }));
-          speak(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
+          updateLastMessage(prev => ({ ...prev, foodData: { ...parsed, logged: true } }));
+          say(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
         } else {
           setPendingFood(parsed);
-          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display, foodData: parsed }));
-          speak(`${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
+          updateLastMessage(prev => ({ ...prev, foodData: parsed }));
+          say(`${parsed.name} — ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
         }
       } else if (parsed.isRecipeAction === 'save') {
         saveRecipe({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
-        const reply = `Recipe saved: ${parsed.name} — ${parsed.calories} kcal · ${parsed.protein || 0}g protein. Tap it above to log anytime.`;
-        updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        speak(`Saved ${parsed.name} as a recipe.`);
+        say(`Saved ${parsed.name} as a recipe. ${parsed.calories} calories, ${parsed.protein || 0} grams protein. Tap it above to log anytime.`);
       } else if (parsed.isRecipeAction === 'delete') {
         deleteRecipe(parsed.name);
-        const reply = `Deleted "${parsed.name}" recipe.`;
-        updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        speak(reply);
+        say(`Deleted the ${parsed.name} recipe.`);
       } else {
         const cleanText = fullText.replace(/\{[\s\S]*?\}/g, '').replace(/[*_`#]/g, '').trim();
-        updateLastMessage(prev => ({ ...prev, displayText: cleanText || prev.displayText }));
-        if (cleanText) speak(cleanText);
+        if (cleanText) say(cleanText);
+        else updateLastMessage(prev => ({ ...prev, displayText: prev.displayText || fullText }));
       }
     } catch (err) {
       setTyping(false);
