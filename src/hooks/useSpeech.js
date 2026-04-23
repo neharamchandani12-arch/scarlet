@@ -1,110 +1,173 @@
 import { useState, useRef, useCallback } from 'react';
 import { getVolume } from '../utils/storage';
 
-// ElevenLabs — Rachel voice: warm, natural, sensual
 const EL_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
 const EL_VOICE = '21m00Tcm4TlvDq8ikWAM'; // Rachel
+const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY;
 
 export function useSpeech() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const recognitionRef = useRef(null);
-  const synthRef = useRef(window.speechSynthesis);
-  const silenceTimerRef = useRef(null);
-  const finalTranscriptRef = useRef('');
-  const onResultCallbackRef = useRef(null);
-  const onEndCallbackRef = useRef(null);
-  const elAudioRef = useRef(null);     // ElevenLabs HTMLAudioElement
-  const keepAliveRef = useRef(null);   // Chrome 15s bug keep-alive interval
 
-  const clearSilenceTimer = () => {
-    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-  };
+  const synthRef       = useRef(window.speechSynthesis);
+  const elAudioRef     = useRef(null);
+  const keepAliveRef   = useRef(null);
+
+  // Whisper recording refs
+  const mediaRecRef    = useRef(null);
+  const streamRef      = useRef(null);
+  const audioCtxRef    = useRef(null);
+  const silenceRef     = useRef(null);
+  const checkRef       = useRef(null);
+  const stopRecRef     = useRef(null); // callable to stop current recording
+  const onResultRef    = useRef(null);
+  const onEndRef       = useRef(null);
 
   const clearKeepAlive = () => {
     if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
   };
 
+  // ── LISTENING (Groq Whisper) ─────────────────────────────────────────────
+
   const startListening = useCallback((onResult, onEnd) => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { onEnd?.(); return; }
+    onResultRef.current = onResult;
+    onEndRef.current    = onEnd;
 
-    onResultCallbackRef.current = onResult;
-    onEndCallbackRef.current = onEnd;
-    finalTranscriptRef.current = '';
+    // Stop any current speech
     synthRef.current.cancel();
+    if (elAudioRef.current) { elAudioRef.current.pause(); elAudioRef.current = null; }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      fallbackWebSpeech(onResult, onEnd);
+      return;
+    }
 
-    recognition.onresult = (e) => {
-      clearSilenceTimer();
-      let interimTranscript = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalTranscriptRef.current += t;
-        else interimTranscript += t;
-      }
-      silenceTimerRef.current = setTimeout(() => {
-        const full = (finalTranscriptRef.current + interimTranscript).trim();
-        if (full) { recognition.stop(); onResultCallbackRef.current?.(full); }
-      }, 3500);
-    };
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        streamRef.current = stream;
 
-    recognition.onend = () => {
-      clearSilenceTimer();
-      setIsListening(false);
-      const remaining = finalTranscriptRef.current.trim();
-      if (remaining) { onResultCallbackRef.current?.(remaining); finalTranscriptRef.current = ''; }
-      onEndCallbackRef.current?.();
-    };
+        // Pick a supported MIME type Groq Whisper accepts
+        const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
+          .find(t => MediaRecorder.isTypeSupported(t)) || '';
 
-    recognition.onerror = (e) => {
-      clearSilenceTimer();
-      setIsListening(false);
-      if (e.error !== 'no-speech' && e.error !== 'aborted') onEndCallbackRef.current?.();
-    };
+        const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+        mediaRecRef.current = recorder;
+        const chunks = [];
 
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
+        // Silence detection via Web Audio API
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtxRef.current = ctx;
+        const src = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        let hasSpoken = false;
+
+        const doStop = () => {
+          if (checkRef.current)  { clearInterval(checkRef.current); checkRef.current = null; }
+          if (silenceRef.current){ clearTimeout(silenceRef.current); silenceRef.current = null; }
+          if (recorder.state !== 'inactive') { try { recorder.stop(); } catch {} }
+        };
+        stopRecRef.current = doStop;
+
+        checkRef.current = setInterval(() => {
+          analyser.getByteFrequencyData(data);
+          const avg = data.reduce((s, v) => s + v, 0) / data.length;
+          if (avg > 10) {
+            hasSpoken = true;
+            if (silenceRef.current) { clearTimeout(silenceRef.current); silenceRef.current = null; }
+          } else if (hasSpoken && !silenceRef.current) {
+            // 1.8s of silence after speaking → done
+            silenceRef.current = setTimeout(doStop, 1800);
+          }
+        }, 80);
+
+        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+        recorder.onstop = async () => {
+          if (checkRef.current)  { clearInterval(checkRef.current);  checkRef.current = null; }
+          if (silenceRef.current){ clearTimeout(silenceRef.current); silenceRef.current = null; }
+          stream.getTracks().forEach(t => t.stop());
+          try { ctx.close(); } catch {}
+          streamRef.current = audioCtxRef.current = null;
+          setIsListening(false);
+
+          if (!hasSpoken || !chunks.length) { onEndRef.current?.(); return; }
+
+          try {
+            const blob = new Blob(chunks, { type: mime || 'audio/webm' });
+            const form = new FormData();
+            form.append('file', blob, 'audio.webm');
+            form.append('model', 'whisper-large-v3');
+            form.append('language', 'en');
+            form.append('response_format', 'json');
+
+            const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${GROQ_KEY}` },
+              body: form,
+            });
+
+            const json = await res.json();
+            const transcript = json.text?.trim();
+            if (transcript) onResultRef.current?.(transcript);
+            else onEndRef.current?.();
+          } catch (e) {
+            console.error('Whisper error:', e);
+            onEndRef.current?.();
+          }
+        };
+
+        recorder.start(200);
+        setIsListening(true);
+      })
+      .catch(() => fallbackWebSpeech(onResult, onEnd));
   }, []);
 
+  // Fallback: browser Web Speech API (less accurate, but better than nothing)
+  function fallbackWebSpeech(onResult, onEnd) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { onEnd?.(); return; }
+    const r = new SR();
+    r.lang = 'en-US';
+    r.continuous = false;
+    r.interimResults = false;
+    r.onresult = e => {
+      const t = Array.from(e.results).map(x => x[0].transcript).join(' ').trim();
+      if (t) onResult(t);
+    };
+    r.onend = () => { setIsListening(false); onEnd?.(); };
+    r.onerror = () => { setIsListening(false); onEnd?.(); };
+    r.start();
+    setIsListening(true);
+  }
+
   const stopListening = useCallback(() => {
-    clearSilenceTimer();
-    recognitionRef.current?.stop();
+    stopRecRef.current?.();
     setIsListening(false);
   }, []);
 
-  // Returns the best available system voice for fallback
+  // ── SPEAKING (ElevenLabs → Web Speech fallback) ──────────────────────────
+
   const getBestVoice = () => {
-    const voices = synthRef.current.getVoices();
+    const v = synthRef.current.getVoices();
     return (
-      // Edge neural voices — best on Windows
-      voices.find(v => /Aria Online|Jenny Online|Michelle Online/.test(v.name)) ||
-      // macOS voices
-      voices.find(v => /Samantha|Karen|Moira|Tessa/.test(v.name)) ||
-      // Google voices
-      voices.find(v => /Google UK English Female|Google US English Female/.test(v.name)) ||
-      // Windows fallback
-      voices.find(v => /Victoria|Zira/.test(v.name)) ||
-      voices.find(v => v.lang === 'en-US' && !/male/i.test(v.name)) ||
-      voices.find(v => v.lang.startsWith('en-')) ||
-      voices[0]
+      v.find(x => /Aria Online|Jenny Online|Michelle Online/.test(x.name)) ||
+      v.find(x => /Samantha|Karen|Moira|Tessa/.test(x.name)) ||
+      v.find(x => /Google UK English Female|Google US English Female/.test(x.name)) ||
+      v.find(x => /Victoria|Zira/.test(x.name)) ||
+      v.find(x => x.lang === 'en-US' && !/male/i.test(x.name)) ||
+      v.find(x => x.lang.startsWith('en-')) ||
+      v[0]
     );
   };
 
   const speakWebSpeech = (clean, onEnd) => {
-    // Split into sentences so Chrome doesn't truncate long responses
     const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)
       ?.map(s => s.trim()).filter(Boolean) || [clean];
-
     let idx = 0;
 
-    // Chrome 15-second bug: pause/resume keeps the synthesis queue alive
     keepAliveRef.current = setInterval(() => {
       if (synthRef.current.speaking && !synthRef.current.paused) {
         synthRef.current.pause();
@@ -114,36 +177,25 @@ export function useSpeech() {
 
     const finish = () => { clearKeepAlive(); setIsSpeaking(false); onEnd?.(); };
 
-    const speakNext = () => {
+    const next = () => {
       if (idx >= sentences.length) { finish(); return; }
-      const utterance = new SpeechSynthesisUtterance(sentences[idx]);
-      utterance.volume = getVolume();
-      utterance.rate = 0.88;
-      utterance.pitch = 1.1;
-
+      const u = new SpeechSynthesisUtterance(sentences[idx]);
+      u.volume = getVolume();
+      u.rate = 0.88;
+      u.pitch = 1.1;
       const voices = synthRef.current.getVoices();
-      if (voices.length > 0) {
-        const v = getBestVoice(); if (v) utterance.voice = v;
-      } else {
-        synthRef.current.addEventListener('voiceschanged', () => {
-          const v = getBestVoice(); if (v) utterance.voice = v;
-        }, { once: true });
-      }
-
-      utterance.onstart = () => { if (idx === 0) setIsSpeaking(true); };
-      utterance.onend = () => { idx++; speakNext(); };
-      utterance.onerror = (e) => {
-        if (e.error === 'interrupted' || e.error === 'canceled') { finish(); return; }
-        idx++; speakNext();
-      };
-      synthRef.current.speak(utterance);
+      if (voices.length > 0) { const v = getBestVoice(); if (v) u.voice = v; }
+      else { synthRef.current.addEventListener('voiceschanged', () => { const v = getBestVoice(); if (v) u.voice = v; }, { once: true }); }
+      u.onstart = () => { if (idx === 0) setIsSpeaking(true); };
+      u.onend = () => { idx++; next(); };
+      u.onerror = e => { if (e.error === 'interrupted' || e.error === 'canceled') { finish(); return; } idx++; next(); };
+      synthRef.current.speak(u);
     };
 
-    speakNext();
+    next();
   };
 
   const speak = useCallback((text, onEnd) => {
-    // Stop anything currently playing
     if (elAudioRef.current) { elAudioRef.current.pause(); elAudioRef.current = null; }
     clearKeepAlive();
     synthRef.current.cancel();
@@ -177,22 +229,12 @@ export function useSpeech() {
           const done = () => { URL.revokeObjectURL(url); elAudioRef.current = null; setIsSpeaking(false); onEnd?.(); };
           audio.onended = done;
           audio.onerror = () => { URL.revokeObjectURL(url); elAudioRef.current = null; setIsSpeaking(false); speakWebSpeech(clean, onEnd); };
-          audio.play().catch(() => {
-            // Autoplay blocked — fall back to Web Speech API
-            URL.revokeObjectURL(url);
-            elAudioRef.current = null;
-            setIsSpeaking(false);
-            speakWebSpeech(clean, onEnd);
-          });
+          audio.play().catch(() => { URL.revokeObjectURL(url); elAudioRef.current = null; setIsSpeaking(false); speakWebSpeech(clean, onEnd); });
         })
-        .catch(() => {
-          setIsSpeaking(false);
-          speakWebSpeech(clean, onEnd);
-        });
+        .catch(() => { setIsSpeaking(false); speakWebSpeech(clean, onEnd); });
       return;
     }
 
-    // No ElevenLabs key — use browser TTS
     speakWebSpeech(clean, onEnd);
   }, []);
 
