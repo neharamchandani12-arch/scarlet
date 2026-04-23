@@ -265,7 +265,23 @@ export default function App() {
         }}>
           SCARLET
         </div>
-        <VoiceSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VoiceSettings />
+          <button
+            onClick={() => {
+              if (window.confirm('Clear chat history? Your meal log and goals will stay.')) {
+                localStorage.removeItem('scarlet_chat');
+                setMessages([]);
+              }
+            }}
+            style={{
+              background: 'none', border: '1px solid var(--border)',
+              color: 'var(--text2)', borderRadius: 8, padding: '5px 10px',
+              fontSize: 11, cursor: 'pointer', fontFamily: 'Inter',
+            }}
+            title="Clear chat"
+          >New Chat</button>
+        </div>
       </div>
 
       {/* Tabs */}
