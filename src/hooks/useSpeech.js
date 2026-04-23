@@ -1,6 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { getVolume } from '../utils/storage';
 
+// ElevenLabs — Rachel voice: warm, natural, sensual
+const EL_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
+const EL_VOICE = '21m00Tcm4TlvDq8ikWAM'; // Rachel
+
 export function useSpeech() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -10,22 +14,24 @@ export function useSpeech() {
   const finalTranscriptRef = useRef('');
   const onResultCallbackRef = useRef(null);
   const onEndCallbackRef = useRef(null);
+  const elAudioRef = useRef(null);     // ElevenLabs HTMLAudioElement
+  const keepAliveRef = useRef(null);   // Chrome 15s bug keep-alive interval
 
   const clearSilenceTimer = () => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+  };
+
+  const clearKeepAlive = () => {
+    if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
   };
 
   const startListening = useCallback((onResult, onEnd) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { onEnd?.('Speech recognition not supported'); return; }
+    if (!SpeechRecognition) { onEnd?.(); return; }
 
     onResultCallbackRef.current = onResult;
     onEndCallbackRef.current = onEnd;
     finalTranscriptRef.current = '';
-
     synthRef.current.cancel();
 
     const recognition = new SpeechRecognition();
@@ -36,51 +42,30 @@ export function useSpeech() {
 
     recognition.onresult = (e) => {
       clearSilenceTimer();
-
       let interimTranscript = '';
-      let finalTranscript = '';
-
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        const transcript = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
-        }
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalTranscriptRef.current += t;
+        else interimTranscript += t;
       }
-
-      if (finalTranscript) {
-        finalTranscriptRef.current += finalTranscript;
-      }
-
-      // Start silence timer — wait 3.5s to let user finish multi-part sentences
       silenceTimerRef.current = setTimeout(() => {
         const full = (finalTranscriptRef.current + interimTranscript).trim();
-        if (full) {
-          recognition.stop();
-          onResultCallbackRef.current?.(full);
-        }
+        if (full) { recognition.stop(); onResultCallbackRef.current?.(full); }
       }, 3500);
     };
 
     recognition.onend = () => {
       clearSilenceTimer();
       setIsListening(false);
-      // If we have accumulated text that wasn't submitted yet
       const remaining = finalTranscriptRef.current.trim();
-      if (remaining) {
-        onResultCallbackRef.current?.(remaining);
-        finalTranscriptRef.current = '';
-      }
+      if (remaining) { onResultCallbackRef.current?.(remaining); finalTranscriptRef.current = ''; }
       onEndCallbackRef.current?.();
     };
 
     recognition.onerror = (e) => {
       clearSilenceTimer();
       setIsListening(false);
-      if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        onEndCallbackRef.current?.();
-      }
+      if (e.error !== 'no-speech' && e.error !== 'aborted') onEndCallbackRef.current?.();
     };
 
     recognitionRef.current = recognition;
@@ -94,49 +79,121 @@ export function useSpeech() {
     setIsListening(false);
   }, []);
 
-  const speak = useCallback((text, onEnd) => {
-    synthRef.current.cancel();
-    const clean = text
-      .replace(/\{[^}]+\}/g, '')
-      .replace(/[*_`#\[\]]/g, '')
-      .replace(/https?:\/\/\S+/g, '')
-      .trim();
-    if (!clean) { onEnd?.(); return; }
+  // Returns the best available system voice for fallback
+  const getBestVoice = () => {
+    const voices = synthRef.current.getVoices();
+    return (
+      // Edge neural voices — best on Windows
+      voices.find(v => /Aria Online|Jenny Online|Michelle Online/.test(v.name)) ||
+      // macOS voices
+      voices.find(v => /Samantha|Karen|Moira|Tessa/.test(v.name)) ||
+      // Google voices
+      voices.find(v => /Google UK English Female|Google US English Female/.test(v.name)) ||
+      // Windows fallback
+      voices.find(v => /Victoria|Zira/.test(v.name)) ||
+      voices.find(v => v.lang === 'en-US' && !/male/i.test(v.name)) ||
+      voices.find(v => v.lang.startsWith('en-')) ||
+      voices[0]
+    );
+  };
 
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.volume = getVolume();
-    utterance.rate = 0.92;
-    utterance.pitch = 1.15;
+  const speakWebSpeech = (clean, onEnd) => {
+    // Split into sentences so Chrome doesn't truncate long responses
+    const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+      ?.map(s => s.trim()).filter(Boolean) || [clean];
 
-    const setVoice = () => {
+    let idx = 0;
+
+    // Chrome 15-second bug: pause/resume keeps the synthesis queue alive
+    keepAliveRef.current = setInterval(() => {
+      if (synthRef.current.speaking && !synthRef.current.paused) {
+        synthRef.current.pause();
+        synthRef.current.resume();
+      }
+    }, 10000);
+
+    const finish = () => { clearKeepAlive(); setIsSpeaking(false); onEnd?.(); };
+
+    const speakNext = () => {
+      if (idx >= sentences.length) { finish(); return; }
+      const utterance = new SpeechSynthesisUtterance(sentences[idx]);
+      utterance.volume = getVolume();
+      utterance.rate = 0.88;
+      utterance.pitch = 1.1;
+
       const voices = synthRef.current.getVoices();
-      const preferred = voices.find(v =>
-        v.name.includes('Samantha') ||
-        v.name.includes('Karen') ||
-        v.name.includes('Moira') ||
-        v.name.includes('Tessa') ||
-        v.name.includes('Google UK English Female') ||
-        v.name.includes('Victoria') ||
-        (v.lang === 'en-US' && v.name.toLowerCase().includes('female'))
-      ) || voices.find(v => v.lang.startsWith('en'));
-      if (preferred) utterance.voice = preferred;
+      if (voices.length > 0) {
+        const v = getBestVoice(); if (v) utterance.voice = v;
+      } else {
+        synthRef.current.addEventListener('voiceschanged', () => {
+          const v = getBestVoice(); if (v) utterance.voice = v;
+        }, { once: true });
+      }
+
+      utterance.onstart = () => { if (idx === 0) setIsSpeaking(true); };
+      utterance.onend = () => { idx++; speakNext(); };
+      utterance.onerror = (e) => {
+        if (e.error === 'interrupted' || e.error === 'canceled') { finish(); return; }
+        idx++; speakNext();
+      };
+      synthRef.current.speak(utterance);
     };
 
-    const voices = synthRef.current.getVoices();
-    if (voices.length > 0) {
-      setVoice();
-    } else {
-      synthRef.current.addEventListener('voiceschanged', setVoice, { once: true });
+    speakNext();
+  };
+
+  const speak = useCallback((text, onEnd) => {
+    // Stop anything currently playing
+    if (elAudioRef.current) { elAudioRef.current.pause(); elAudioRef.current = null; }
+    clearKeepAlive();
+    synthRef.current.cancel();
+
+    const clean = text
+      .replace(/\{[\s\S]*?\}/g, '')
+      .replace(/[*_`#\[\]]/g, '')
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/\n+/g, ' ')
+      .trim();
+
+    if (!clean) { setIsSpeaking(false); onEnd?.(); return; }
+
+    if (EL_KEY) {
+      setIsSpeaking(true);
+      fetch(`https://api.elevenlabs.io/v1/text-to-speech/${EL_VOICE}`, {
+        method: 'POST',
+        headers: { 'xi-api-key': EL_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: clean,
+          model_id: 'eleven_turbo_v2_5',
+          voice_settings: { stability: 0.4, similarity_boost: 0.85, style: 0.35, use_speaker_boost: true },
+        }),
+      })
+        .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.volume = getVolume();
+          elAudioRef.current = audio;
+          const cleanup = () => { URL.revokeObjectURL(url); elAudioRef.current = null; setIsSpeaking(false); onEnd?.(); };
+          audio.onended = cleanup;
+          audio.onerror = cleanup;
+          audio.play().catch(cleanup);
+        })
+        .catch(() => {
+          // ElevenLabs failed (quota exceeded, network, etc.) — fall back to browser TTS
+          setIsSpeaking(false);
+          speakWebSpeech(clean, onEnd);
+        });
+      return;
     }
 
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => { setIsSpeaking(false); onEnd?.(); };
-    utterance.onerror = () => { setIsSpeaking(false); onEnd?.(); };
-
-    synthRef.current.speak(utterance);
+    // No ElevenLabs key — use browser TTS
+    speakWebSpeech(clean, onEnd);
   }, []);
 
   const stopSpeaking = useCallback(() => {
+    if (elAudioRef.current) { elAudioRef.current.pause(); elAudioRef.current = null; }
+    clearKeepAlive();
     synthRef.current.cancel();
     setIsSpeaking(false);
   }, []);

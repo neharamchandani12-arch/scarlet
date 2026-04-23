@@ -314,20 +314,26 @@ export default function App() {
               </div>
             </div>
 
-            {/* Microplastics corner badge */}
-            {microplastics.total > 0 && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 14px', borderRadius: 10,
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,143,171,0.15)',
-                fontSize: 11, color: 'var(--text2)',
-              }}>
-                <span style={{ fontSize: 14 }}>🧫</span>
-                <span>~{microplastics.total.toLocaleString()} microplastic particles today</span>
-                {microplastics.biggest && <span style={{ color: 'var(--neon)', marginLeft: 'auto' }}>{microplastics.biggest}</span>}
+            {/* Microplastics tracker — always visible */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 14px', borderRadius: 10,
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,143,171,0.15)',
+              fontSize: 11, color: 'var(--text2)',
+            }}>
+              <span style={{ fontSize: 14 }}>🧫</span>
+              <div style={{ flex: 1 }}>
+                <span style={{ color: microplastics.total > 0 ? 'var(--text)' : 'var(--text2)' }}>
+                  {microplastics.total > 0
+                    ? `~${microplastics.total.toLocaleString()} microplastic particles today`
+                    : 'Microplastics tracker — log food to start'}
+                </span>
               </div>
-            )}
+              {microplastics.biggest && (
+                <span style={{ color: 'var(--neon)', flexShrink: 0 }}>{microplastics.biggest}</span>
+              )}
+            </div>
 
             {/* Saved recipes bar */}
             <SavedRecipes />
