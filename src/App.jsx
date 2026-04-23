@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import './styles/cyberpunk.css';
 
 import Particles from './components/Particles';
-import ScarletAvatar from './components/ScarletAvatar';
 import CaloriesRemaining from './components/CaloriesRemaining';
 import ChatHistory from './components/ChatHistory';
 import MicButton from './components/MicButton';
@@ -13,7 +12,6 @@ import BarcodeScanner from './components/BarcodeScanner';
 import PinnedFoods from './components/PinnedFoods';
 import SavedRecipes from './components/SavedRecipes';
 import WeeklyReport from './components/WeeklyReport';
-import ThemeSwitcher from './components/ThemeSwitcher';
 import VoiceSettings from './components/VoiceSettings';
 import BodyProgress from './components/BodyProgress';
 
@@ -54,7 +52,7 @@ export default function App() {
   const [input, setInput] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showBarcode, setShowBarcode] = useState(false);
-  const [theme, setTheme] = useState(getTheme());
+  const [theme] = useState(getTheme());
   const [pendingFood, setPendingFood] = useState(null);
   const [microplastics, setMicroplastics] = useState(() => getMicroplasticsToday());
   const [showBodyUpload, setShowBodyUpload] = useState(false);
@@ -255,11 +253,12 @@ export default function App() {
         borderBottom: '1px solid var(--border)',
         background: 'rgba(8,6,18,0.92)', backdropFilter: 'blur(20px)',
       }}>
-        <ThemeSwitcher onThemeChange={setTheme} />
+        <div style={{ width: 60 }} />
         <div style={{
-          fontFamily: 'Orbitron', fontSize: 16, fontWeight: 900, letterSpacing: 4,
-          background: 'linear-gradient(135deg, var(--neon), var(--neon2))',
+          fontFamily: 'Orbitron', fontSize: 18, fontWeight: 900, letterSpacing: 5,
+          background: 'linear-gradient(135deg, #ff0040 0%, #cc44ff 50%, #9400d3 100%)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+          filter: 'drop-shadow(0 0 12px rgba(255,0,64,0.4))',
         }}>
           SCARLET
         </div>
@@ -298,20 +297,14 @@ export default function App() {
         {tab === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, margin: '0 auto' }}>
 
-            {/* Avatar + calories + body photo button */}
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <ScarletAvatar speaking={isSpeaking} />
-                <button
-                  className="btn-neon"
-                  style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
-                  onClick={() => setTab('body')}
-                  title="Body analysis & progress photos"
-                >📸 Body Analysis</button>
-              </div>
-              <div style={{ flex: 1 }}>
-                <CaloriesRemaining />
-              </div>
+            {/* Calories + body analysis button */}
+            <div style={{ position: 'relative' }}>
+              <CaloriesRemaining />
+              <button
+                className="btn-neon"
+                style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, padding: '4px 10px' }}
+                onClick={() => setTab('body')}
+              >📸 Body</button>
             </div>
 
             {/* Microplastics tracker — always visible */}

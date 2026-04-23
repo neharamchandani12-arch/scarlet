@@ -1,25 +1,44 @@
 export default function MicButton({ isListening, isSpeaking, onClick, disabled }) {
-  const active = isListening || isSpeaking;
+  const state = isListening ? 'listening' : isSpeaking ? 'speaking' : 'idle';
+
+  const styles = {
+    idle: {
+      background: 'rgba(255,255,255,0.04)',
+      border: '2px solid rgba(255,255,255,0.2)',
+      color: 'rgba(255,255,255,0.7)',
+      boxShadow: 'none',
+      animation: 'none',
+    },
+    listening: {
+      background: 'rgba(148,0,211,0.18)',
+      border: '2px solid #9400d3',
+      color: '#cc44ff',
+      boxShadow: '0 0 24px rgba(148,0,211,0.5)',
+      animation: 'listening-pulse 0.9s infinite',
+    },
+    speaking: {
+      background: 'rgba(255,0,64,0.15)',
+      border: '2px solid #ff0040',
+      color: '#ff0040',
+      boxShadow: '0 0 24px rgba(255,0,64,0.5)',
+      animation: 'speaking-pulse 0.9s infinite',
+    },
+  };
+
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       style={{
-        width: 48, height: 48, borderRadius: '50%',
-        border: `2px solid ${isListening ? 'var(--neon2)' : active ? 'var(--neon)' : 'var(--border)'}`,
-        background: isListening
-          ? 'rgba(233,196,106,0.15)'
-          : active
-          ? 'rgba(255,143,171,0.12)'
-          : 'rgba(255,255,255,0.04)',
-        color: isListening ? 'var(--neon2)' : 'var(--neon)',
+        width: 64, height: 64,
+        borderRadius: '50%',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 18, transition: 'all 0.2s',
-        boxShadow: active ? 'var(--glow)' : 'none',
-        animation: isListening ? 'speaking-pulse 1s infinite' : 'none',
+        fontSize: 24,
+        transition: 'all 0.2s',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.4 : 1,
         flexShrink: 0,
+        ...styles[state],
       }}
     >
       {isListening ? '⏹' : isSpeaking ? '🔊' : '🎙'}
