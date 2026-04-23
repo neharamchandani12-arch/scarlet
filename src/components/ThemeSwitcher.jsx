@@ -1,9 +1,9 @@
 import { getTheme, setTheme } from '../utils/storage';
 
 const THEMES = [
-  { id: 'pink', label: 'Pink', color: '#ff2d78' },
-  { id: 'cyan', label: 'Cyan', color: '#00fff7' },
-  { id: 'purple', label: 'Purple', color: '#bf00ff' },
+  { id: 'rose', color: '#ff8fab' },
+  { id: 'violet', color: '#c77dff' },
+  { id: 'gold', color: '#e9c46a' },
 ];
 
 export default function ThemeSwitcher({ onThemeChange }) {
@@ -16,19 +16,18 @@ export default function ThemeSwitcher({ onThemeChange }) {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <span style={{ fontSize: 10, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: 1 }}>theme</span>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
       {THEMES.map(t => (
         <button
           key={t.id}
           onClick={() => select(t.id)}
           style={{
-            width: 20, height: 20, borderRadius: '50%',
-            background: t.color, border: `2px solid ${current === t.id ? 'white' : 'transparent'}`,
-            boxShadow: current === t.id ? `0 0 8px ${t.color}` : 'none',
-            cursor: 'pointer',
+            width: 18, height: 18, borderRadius: '50%',
+            background: t.color,
+            border: `2px solid ${current === t.id ? 'white' : 'transparent'}`,
+            boxShadow: current === t.id ? `0 0 10px ${t.color}` : 'none',
+            cursor: 'pointer', transition: 'all 0.2s',
           }}
-          title={t.label}
         />
       ))}
     </div>

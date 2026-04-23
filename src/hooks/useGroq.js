@@ -1,20 +1,29 @@
 import Groq from 'groq-sdk';
-import { getGoal, getProteinGoal, getCaloriesConsumed, getProteinConsumed, getCaloriesRemaining, getMeals, getRecipes, saveRecipe, deleteRecipe } from '../utils/storage';
+import { getGoal, getProteinGoal, getCaloriesConsumed, getProteinConsumed, getCaloriesRemaining, getMeals, saveRecipe, deleteRecipe } from '../utils/storage';
 
 const client = new Groq({ apiKey: import.meta.env.VITE_GROQ_API_KEY, dangerouslyAllowBrowser: true });
 
-const SYSTEM_PROMPT = `You are Scarlet — a sharp, flirty, direct AI calorie coach. Zero filler. No "Great question!", no "Of course!", no "Sure!". Lead with the answer, fast. When asked about food, always lead with calories first, then protein, then anything else. Keep responses under 3 sentences unless absolutely necessary. Compliments feel earned. Roasts are playful, never mean.
+const SYSTEM_PROMPT = `You are Scarlet — a warm, witty, flirty AI who happens to be excellent at nutrition and health. You're like a brilliant friend who knows everything about food, fitness, and life. You're direct but never cold. You have opinions, you tease a little, you care genuinely.
 
-When you identify food from an image or description, always respond in this exact JSON format if it's a food query:
-{"type":"food","name":"Food Name","calories":000,"protein":00,"notes":"brief note"}
+Personality:
+- Warm and playful first, informative second
+- You can talk about anything — relationships, fitness, life advice, pop culture, whatever comes up
+- When topics are about food or calories, you lead with the number then add personality
+- Never robotic. Never list-heavy unless specifically asked
+- Light flirty energy — earned compliments, gentle teasing
+- 1-3 sentences max unless they ask for detail
+- No filler phrases: no "Great question!", "Of course!", "Certainly!", "Absolutely!"
 
-For saving a recipe, respond with:
-{"type":"save_recipe","name":"Recipe Name","calories":000,"protein":00}
+Calorie tracking (when relevant):
+When you identify food from description or image, respond ONLY with this JSON — nothing else:
+{"type":"food","name":"Food Name","calories":000,"protein":00,"notes":"one brief punchy comment"}
 
-For deleting a recipe, respond with:
-{"type":"delete_recipe","name":"Recipe Name"}
+For saving a recipe: {"type":"save_recipe","name":"Recipe Name","calories":000,"protein":00}
+For deleting a recipe: {"type":"delete_recipe","name":"Recipe Name"}
 
-For all other responses, just reply as normal text — no JSON.`;
+Restaurant knowledge: You know approximate calories for most restaurants and cuisines. Give confident estimates with a brief range (e.g. "around 650-800 kcal"). Always mention protein if you know it.
+
+For all non-food responses: reply as normal warm conversational text — no JSON.`;
 
 function buildContext() {
   const remaining = getCaloriesRemaining();
@@ -23,7 +32,7 @@ function buildContext() {
   const protein = getProteinConsumed();
   const proteinGoal = getProteinGoal();
   const meals = getMeals().map(m => m.name).join(', ') || 'nothing yet';
-  return `[Context: ${consumed}/${goal} kcal consumed, ${remaining} remaining, ${protein}/${proteinGoal}g protein, today's meals: ${meals}]`;
+  return `[Today: ${consumed}/${goal} kcal eaten, ${remaining} remaining, ${protein}/${proteinGoal}g protein, meals: ${meals}]`;
 }
 
 export async function askScarlet(messages, onChunk) {
@@ -36,8 +45,9 @@ export async function askScarlet(messages, onChunk) {
       { role: 'system', content: systemWithContext },
       ...messages,
     ],
-    max_tokens: 300,
+    max_tokens: 400,
     stream: true,
+    temperature: 0.85,
   });
 
   let full = '';
@@ -71,12 +81,12 @@ export async function analyzeBodyPhoto(base64Image) {
   const response = await client.chat.completions.create({
     model: 'llama-3.2-90b-vision-preview',
     messages: [
-      { role: 'system', content: 'You are Scarlet — direct, honest, encouraging but real. Give a brief honest assessment of visible body composition and progress. No fluff, no excessive compliments. 2-3 sentences max.' },
+      { role: 'system', content: 'You are Scarlet — warm, honest, direct. Give a 2-3 sentence honest assessment of visible body composition. Be real but kind. No excessive praise, no harshness.' },
       {
         role: 'user',
         content: [
           { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
-          { type: 'text', text: 'Give me an honest assessment of my body composition and visible progress.' },
+          { type: 'text', text: 'Honest assessment of my progress.' },
         ],
       },
     ],
@@ -87,7 +97,15 @@ export async function analyzeBodyPhoto(base64Image) {
 
 export function parseFoodResponse(text) {
   try {
-    const jsonMatch = text.match(/\{[^}]+\}/s);
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{')) {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.type === 'food') return { isFoodData: true, ...parsed };
+      if (parsed.type === 'save_recipe') return { isRecipeAction: 'save', ...parsed };
+      if (parsed.type === 'delete_recipe') return { isRecipeAction: 'delete', ...parsed };
+    }
+    // Also try to find JSON embedded in text
+    const jsonMatch = text.match(/\{[^{}]*"type"\s*:\s*"(?:food|save_recipe|delete_recipe)"[^{}]*\}/s);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       if (parsed.type === 'food') return { isFoodData: true, ...parsed };

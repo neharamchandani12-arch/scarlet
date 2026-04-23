@@ -10,12 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tavily/core": "^0.7.2",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "groq-sdk": "^1.1.2",
     "jspdf": "^4.2.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "tavily": "^2.0.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

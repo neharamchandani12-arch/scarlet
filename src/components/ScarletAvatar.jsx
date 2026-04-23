@@ -1,36 +1,72 @@
 export default function ScarletAvatar({ speaking }) {
   return (
-    <div className={`scarlet-avatar ${speaking ? 'speaking' : ''}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Outer ring */}
-        <circle cx="40" cy="40" r="38" stroke="var(--neon)" strokeWidth="1" strokeDasharray="4 2" opacity="0.6" />
-        {/* Face */}
-        <circle cx="40" cy="40" r="30" fill="var(--bg2)" stroke="var(--neon)" strokeWidth="1.5" />
-        {/* Hair accent */}
-        <path d="M15 30 Q20 10 40 10 Q60 10 65 30" stroke="var(--neon)" strokeWidth="2" fill="none" opacity="0.8"/>
-        {/* Eyes */}
-        <g className="avatar-eyes">
-          <ellipse cx="30" cy="38" rx="5" ry="4" fill="var(--neon)" />
-          <ellipse cx="50" cy="38" rx="5" ry="4" fill="var(--neon)" />
-          <circle cx="31" cy="37" r="1.5" fill="var(--bg)" />
-          <circle cx="51" cy="37" r="1.5" fill="var(--bg)" />
-          {/* Eye shine */}
-          <circle cx="32" cy="36" r="0.8" fill="white" opacity="0.8" />
-          <circle cx="52" cy="36" r="0.8" fill="white" opacity="0.8" />
-        </g>
-        {/* Nose */}
-        <path d="M38 44 L40 48 L42 44" stroke="var(--neon2)" strokeWidth="1" fill="none" opacity="0.5"/>
-        {/* Mouth */}
-        <path d="M32 54 Q40 60 48 54" stroke="var(--neon)" strokeWidth="1.5" fill="none" />
-        {/* Cheek blush */}
-        <ellipse cx="24" cy="46" rx="5" ry="3" fill="var(--neon)" opacity="0.15"/>
-        <ellipse cx="56" cy="46" rx="5" ry="3" fill="var(--neon)" opacity="0.15"/>
-        {/* Tech details */}
-        <line x1="10" y1="40" x2="18" y2="40" stroke="var(--neon2)" strokeWidth="1" opacity="0.5"/>
-        <line x1="62" y1="40" x2="70" y2="40" stroke="var(--neon2)" strokeWidth="1" opacity="0.5"/>
-      </svg>
-      <span style={{ fontFamily: 'Orbitron', fontSize: 18, fontWeight: 900, color: 'var(--neon)', textShadow: 'var(--glow)', letterSpacing: 4 }}
-        className="glitch" data-text="SCARLET">SCARLET</span>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      {/* Avatar ring — glows when speaking */}
+      <div style={{
+        width: 80, height: 80, borderRadius: '50%',
+        border: `2px solid ${speaking ? 'var(--neon)' : 'var(--border)'}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'border-color 0.3s, box-shadow 0.3s',
+        boxShadow: speaking
+          ? '0 0 16px rgba(255,143,171,0.8), 0 0 40px rgba(255,143,171,0.4), 0 0 60px rgba(255,143,171,0.2)'
+          : '0 0 0 rgba(255,143,171,0)',
+        animation: speaking ? 'speaking-pulse 0.9s ease-in-out infinite' : 'none',
+        background: 'radial-gradient(circle at 40% 35%, rgba(255,143,171,0.12), rgba(20,12,40,0.9))',
+      }}>
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Face base */}
+          <circle cx="28" cy="28" r="26" fill="url(#faceGrad)" />
+          {/* Hair */}
+          <path d="M6 24 Q8 6 28 6 Q48 6 50 24" fill="url(#hairGrad)" />
+          <path d="M6 24 Q4 28 6 34" stroke="url(#hairGrad)" strokeWidth="4" fill="none" strokeLinecap="round"/>
+          <path d="M50 24 Q52 28 50 34" stroke="url(#hairGrad)" strokeWidth="4" fill="none" strokeLinecap="round"/>
+          {/* Eyes */}
+          <g style={{ filter: speaking ? 'drop-shadow(0 0 6px var(--neon))' : 'drop-shadow(0 0 2px var(--neon))', transition: 'filter 0.3s' }}>
+            <ellipse cx="20" cy="27" rx="4.5" ry="3.5" fill="var(--neon)" />
+            <ellipse cx="36" cy="27" rx="4.5" ry="3.5" fill="var(--neon)" />
+            <circle cx="21" cy="26" r="1.5" fill="#080612" />
+            <circle cx="37" cy="26" r="1.5" fill="#080612" />
+            <circle cx="21.8" cy="25.2" r="0.7" fill="white" opacity="0.9"/>
+            <circle cx="37.8" cy="25.2" r="0.7" fill="white" opacity="0.9"/>
+          </g>
+          {/* Nose */}
+          <path d="M26.5 31.5 L28 34 L29.5 31.5" stroke="rgba(255,143,171,0.4)" strokeWidth="1" fill="none" strokeLinecap="round"/>
+          {/* Lips */}
+          <path d="M22 39 Q28 44 34 39" stroke="var(--neon)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+          <path d="M22 39 Q25 41 28 39 Q31 41 34 39" fill="rgba(255,143,171,0.25)"/>
+          {/* Cheek blush */}
+          <ellipse cx="15" cy="33" rx="4" ry="2.5" fill="var(--neon)" opacity={speaking ? 0.3 : 0.15}/>
+          <ellipse cx="41" cy="33" rx="4" ry="2.5" fill="var(--neon)" opacity={speaking ? 0.3 : 0.15}/>
+          {/* Tech accent lines */}
+          <line x1="2" y1="28" x2="8" y2="28" stroke="var(--neon2)" strokeWidth="1" opacity="0.5"/>
+          <line x1="48" y1="28" x2="54" y2="28" stroke="var(--neon2)" strokeWidth="1" opacity="0.5"/>
+          <circle cx="2" cy="28" r="1" fill="var(--neon2)" opacity="0.6"/>
+          <circle cx="54" cy="28" r="1" fill="var(--neon2)" opacity="0.6"/>
+          <defs>
+            <radialGradient id="faceGrad" cx="40%" cy="35%" r="70%">
+              <stop offset="0%" stopColor="#2a1840"/>
+              <stop offset="100%" stopColor="#120a22"/>
+            </radialGradient>
+            <linearGradient id="hairGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#c77dff"/>
+              <stop offset="100%" stopColor="#ff8fab"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      {/* Name */}
+      <span
+        className="glitch"
+        data-text="SCARLET"
+        style={{
+          fontFamily: 'Orbitron', fontSize: 15, fontWeight: 900,
+          letterSpacing: 5,
+          background: 'linear-gradient(135deg, var(--neon), var(--neon2))',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+        }}
+      >SCARLET</span>
     </div>
   );
 }

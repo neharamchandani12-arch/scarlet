@@ -11,21 +11,24 @@ const KEYS = {
   VOLUME: 'scarlet_volume',
   PROTEIN_GOAL: 'scarlet_protein_goal',
   MICROPLASTICS: 'scarlet_microplastics',
-  NOTIF_PERMISSION: 'scarlet_notif',
 };
 
 const today = () => new Date().toISOString().split('T')[0];
 
+// Dispatch update event so components re-render in real time
+export function dispatchUpdate() {
+  window.dispatchEvent(new CustomEvent('scarlet-update'));
+}
+
 export function getGoal() { return parseInt(localStorage.getItem(KEYS.GOAL) || '2000'); }
-export function setGoal(v) { localStorage.setItem(KEYS.GOAL, v); }
+export function setGoal(v) { localStorage.setItem(KEYS.GOAL, v); dispatchUpdate(); }
 export function getProteinGoal() { return parseInt(localStorage.getItem(KEYS.PROTEIN_GOAL) || '150'); }
-export function setProteinGoal(v) { localStorage.setItem(KEYS.PROTEIN_GOAL, v); }
+export function setProteinGoal(v) { localStorage.setItem(KEYS.PROTEIN_GOAL, v); dispatchUpdate(); }
 
 export function getMeals() {
   const raw = localStorage.getItem(KEYS.MEALS);
   if (!raw) return [];
-  const all = JSON.parse(raw);
-  return all.filter(m => m.date === today());
+  return JSON.parse(raw).filter(m => m.date === today());
 }
 export function getAllMeals() {
   const raw = localStorage.getItem(KEYS.MEALS);
@@ -35,10 +38,12 @@ export function addMeal(meal) {
   const all = getAllMeals();
   all.push({ ...meal, date: today(), id: Date.now() });
   localStorage.setItem(KEYS.MEALS, JSON.stringify(all));
+  dispatchUpdate();
 }
 export function removeMeal(id) {
   const all = getAllMeals().filter(m => m.id !== id);
   localStorage.setItem(KEYS.MEALS, JSON.stringify(all));
+  dispatchUpdate();
 }
 
 export function getCaloriesConsumed() {
@@ -87,6 +92,7 @@ export function addPinned(food) {
 export function removePinned(name) {
   const pinned = getPinned().filter(p => p.name !== name);
   localStorage.setItem(KEYS.PINNED, JSON.stringify(pinned));
+  dispatchUpdate();
 }
 
 export function getRecipes() {
@@ -99,10 +105,12 @@ export function saveRecipe(recipe) {
   if (idx >= 0) recipes[idx] = recipe;
   else recipes.push(recipe);
   localStorage.setItem(KEYS.RECIPES, JSON.stringify(recipes));
+  dispatchUpdate();
 }
 export function deleteRecipe(name) {
   const recipes = getRecipes().filter(r => r.name !== name);
   localStorage.setItem(KEYS.RECIPES, JSON.stringify(recipes));
+  dispatchUpdate();
 }
 
 export function getWeightLog() {
@@ -115,9 +123,10 @@ export function addWeight(kg) {
   if (existing >= 0) log[existing].kg = kg;
   else log.push({ date: today(), kg });
   localStorage.setItem(KEYS.WEIGHT, JSON.stringify(log));
+  dispatchUpdate();
 }
 
-export function getTheme() { return localStorage.getItem(KEYS.THEME) || 'pink'; }
+export function getTheme() { return localStorage.getItem(KEYS.THEME) || 'rose'; }
 export function setTheme(t) { localStorage.setItem(KEYS.THEME, t); }
 
 export function getVolume() { return parseFloat(localStorage.getItem(KEYS.VOLUME) || '0.8'); }

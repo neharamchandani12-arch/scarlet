@@ -32,7 +32,6 @@ export default function App() {
   const [input, setInput] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showBarcode, setShowBarcode] = useState(false);
-  const [refresh, setRefresh] = useState(0);
   const [theme, setTheme] = useState(getTheme());
   const [pendingFood, setPendingFood] = useState(null);
   const { isListening, isSpeaking, startListening, stopListening, speak, stopSpeaking } = useSpeech();
@@ -48,8 +47,6 @@ export default function App() {
       Notification.requestPermission();
     }
   }, []);
-
-  const forceRefresh = useCallback(() => setRefresh(r => r + 1), []);
 
   const addMessage = useCallback((msg) => {
     setMessages(prev => {
@@ -82,6 +79,7 @@ export default function App() {
     try {
       const apiMessages = history.map(m => ({ role: m.role, content: m.content }));
       let fullText = '';
+      let speechStarted = false;
 
       await askScarlet(apiMessages, (delta, full) => {
         fullText = full;
@@ -93,6 +91,15 @@ export default function App() {
             ? parsed.notes || `${parsed.name}: ${parsed.calories} kcal, ${parsed.protein}g protein`
             : full,
         }));
+
+        // Auto-speak as soon as we have enough text (first sentence)
+        if (fromVoice && !speechStarted && !parsed.isFoodData) {
+          const sentences = full.match(/[^.!?]+[.!?]/g);
+          if (sentences && sentences.length >= 1 && full.length > 30) {
+            speechStarted = true;
+            speak(full);
+          }
+        }
       });
 
       setTyping(false);
@@ -106,33 +113,34 @@ export default function App() {
           displayText: `${parsed.name}: ${parsed.calories} kcal, ${parsed.protein}g protein`,
           foodData: parsed,
         }));
-        if (fromVoice) speak(`${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein. Log it?`);
+        if (fromVoice) speak(`${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein. Want me to log it?`);
       } else if (parsed.isRecipeAction === 'save') {
         saveRecipe({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
-        forceRefresh();
         const reply = `Saved "${parsed.name}" as a recipe.`;
         updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        if (fromVoice) speak(reply);
+        if (fromVoice && !speechStarted) speak(reply);
       } else if (parsed.isRecipeAction === 'delete') {
         deleteRecipe(parsed.name);
-        forceRefresh();
         const reply = `Deleted recipe "${parsed.name}".`;
         updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        if (fromVoice) speak(reply);
+        if (fromVoice && !speechStarted) speak(reply);
       } else {
-        const cleanText = fullText.replace(/[*_`#]/g, '').trim();
-        if (fromVoice && cleanText) speak(cleanText);
+        // Speak full response if auto-speak didn't fire yet
+        if (fromVoice && !speechStarted) {
+          const cleanText = fullText.replace(/[*_`#]/g, '').trim();
+          if (cleanText) speak(cleanText);
+        }
       }
     } catch (err) {
       setTyping(false);
-      const errMsg = 'Connection error. Try again.';
+      const errMsg = 'Something went wrong. Try again.';
       updateLastMessage(prev => ({ ...prev, content: errMsg, displayText: errMsg }));
     }
-  }, [messages, addMessage, updateLastMessage, forceRefresh, speak]);
+  }, [messages, addMessage, updateLastMessage, speak]);
 
   const handleMic = useCallback(() => {
-    if (isListening) { stopListening(); return; }
     if (isSpeaking) { stopSpeaking(); return; }
+    if (isListening) { stopListening(); return; }
     startListening(
       (transcript) => sendMessage(transcript, true),
       () => {}
@@ -141,7 +149,7 @@ export default function App() {
 
   const handleCameraResult = useCallback(async (base64) => {
     setTyping(true);
-    addMessage({ role: 'user', content: '📷 [Photo of food]', displayText: '📷 Photo sent for analysis' });
+    addMessage({ role: 'user', content: '📷 Photo sent for analysis', displayText: '📷 Photo sent for analysis' });
     addMessage({ role: 'assistant', content: '', displayText: '' });
     try {
       const result = await analyzeImage(base64);
@@ -150,8 +158,7 @@ export default function App() {
       if (parsed.isFoodData) {
         setPendingFood(parsed);
         updateLastMessage(prev => ({
-          ...prev,
-          content: result,
+          ...prev, content: result,
           displayText: `${parsed.name}: ${parsed.calories} kcal, ${parsed.protein}g protein`,
           foodData: parsed,
         }));
@@ -165,7 +172,7 @@ export default function App() {
   }, [addMessage, updateLastMessage]);
 
   const handleBarcodeResult = useCallback((data) => {
-    addMessage({ role: 'user', content: `📦 Scanned: ${data.name}` });
+    addMessage({ role: 'user', content: `Scanned: ${data.name}` });
     addMessage({
       role: 'assistant',
       content: `${data.name}: ${data.calories} kcal, ${data.protein}g protein (per ${data.servingSize})`,
@@ -178,14 +185,19 @@ export default function App() {
   function logPendingFood() {
     if (!pendingFood) return;
     addMeal({ name: pendingFood.name, calories: pendingFood.calories, protein: pendingFood.protein || 0 });
-    const particles = estimateMicroplastics(pendingFood.name);
-    addMicroplastics(pendingFood.name, particles);
+    addMicroplastics(pendingFood.name, estimateMicroplastics(pendingFood.name));
     addPinned({ name: pendingFood.name, calories: pendingFood.calories, protein: pendingFood.protein || 0 });
     updateLastMessage(prev => ({ ...prev, foodData: { ...prev.foodData, logged: true } }));
     setPendingFood(null);
     checkAndUpdateStreak();
-    forceRefresh();
   }
+
+  const TABS = [
+    { id: 'home', label: 'Chat' },
+    { id: 'log', label: 'Log' },
+    { id: 'stats', label: 'Stats' },
+    { id: 'body', label: 'Body' },
+  ];
 
   return (
     <div style={{ minHeight: '100vh', position: 'relative', display: 'flex', flexDirection: 'column' }}>
@@ -195,13 +207,17 @@ export default function App() {
       {/* Header */}
       <div style={{
         position: 'relative', zIndex: 10,
-        padding: '12px 16px',
+        padding: '12px 20px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: '1px solid var(--border)',
-        background: 'rgba(5,5,8,0.9)', backdropFilter: 'blur(10px)',
+        background: 'rgba(8,6,18,0.92)', backdropFilter: 'blur(20px)',
       }}>
         <ThemeSwitcher onThemeChange={setTheme} />
-        <div style={{ fontFamily: 'Orbitron', fontSize: 16, color: 'var(--neon)', textShadow: 'var(--glow)' }}>
+        <div style={{
+          fontFamily: 'Orbitron', fontSize: 16, fontWeight: 900, letterSpacing: 4,
+          background: 'linear-gradient(135deg, var(--neon), var(--neon2))',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+        }}>
           SCARLET
         </div>
         <VoiceSettings />
@@ -209,87 +225,110 @@ export default function App() {
 
       {/* Tabs */}
       <div className="tab-bar" style={{ position: 'relative', zIndex: 10 }}>
-        {[
-          { id: 'home', label: 'Chat' },
-          { id: 'log', label: 'Log' },
-          { id: 'stats', label: 'Stats' },
-          { id: 'body', label: 'Body' },
-        ].map(t => (
+        {TABS.map(t => (
           <button key={t.id} className={`tab-btn ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Content */}
+      {/* Main content */}
       <div style={{ flex: 1, overflowY: 'auto', position: 'relative', zIndex: 5, padding: '16px' }}>
+
+        {/* HOME TAB */}
         {tab === 'home' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 480, margin: '0 auto' }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, margin: '0 auto' }}>
+
+            {/* Avatar + calories side by side */}
+            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
               <ScarletAvatar speaking={isSpeaking} />
               <div style={{ flex: 1 }}>
-                <CaloriesRemaining onUpdate={forceRefresh} key={refresh} />
+                <CaloriesRemaining />
               </div>
             </div>
 
-            <SavedRecipes onUpdate={forceRefresh} key={`recipes-${refresh}`} />
+            {/* Saved recipes bar */}
+            <SavedRecipes />
 
-            <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', minHeight: 300, maxHeight: '55vh' }}>
+            {/* Chat card */}
+            <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', minHeight: 280, maxHeight: '55vh' }}>
               <ChatHistory messages={messages} typing={typing} />
 
+              {/* Log food button */}
               {pendingFood && (
-                <button className="btn-solid" style={{ marginBottom: 8 }} onClick={logPendingFood}>
+                <button className="btn-solid" style={{ marginBottom: 10, fontSize: 13 }} onClick={logPendingFood}>
                   + Log {pendingFood.name} ({pendingFood.calories} kcal)
                 </button>
               )}
 
+              {/* Waveform while listening/speaking */}
               {(isListening || isSpeaking) && (
-                <div style={{ marginBottom: 8 }}>
-                  <Waveform active={isListening || isSpeaking} />
+                <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Waveform active bars={10} />
+                  <span style={{ fontSize: 11, color: 'var(--text2)' }}>
+                    {isListening ? 'listening...' : 'speaking...'}
+                  </span>
                 </div>
               )}
 
+              {/* Input row */}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button className="btn-neon" style={{ padding: '8px 10px', fontSize: 16, flexShrink: 0 }}
-                  onClick={() => setShowCamera(true)} title="Take photo">📷</button>
-                <button className="btn-neon" style={{ padding: '8px 10px', fontSize: 16, flexShrink: 0 }}
-                  onClick={() => setShowBarcode(true)} title="Scan barcode">📦</button>
+                <button
+                  className="btn-neon"
+                  style={{ padding: '9px 11px', fontSize: 15, flexShrink: 0, borderRadius: 10 }}
+                  onClick={() => setShowCamera(true)}
+                  title="Identify food from photo"
+                >📷</button>
+                <button
+                  className="btn-neon"
+                  style={{ padding: '9px 11px', fontSize: 15, flexShrink: 0, borderRadius: 10 }}
+                  onClick={() => setShowBarcode(true)}
+                  title="Scan barcode"
+                >⬛</button>
                 <input
-                  ref={inputRef} value={input}
+                  ref={inputRef}
+                  value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
-                  placeholder="Ask Scarlet..."
-                  style={{ flex: 1, fontSize: 13 }}
+                  placeholder="Ask Scarlet anything..."
+                  style={{ flex: 1 }}
                   disabled={typing}
                 />
-                <MicButton isListening={isListening} onClick={handleMic} disabled={typing} />
+                <MicButton isListening={isListening} isSpeaking={isSpeaking} onClick={handleMic} disabled={typing} />
               </div>
             </div>
           </div>
         )}
 
+        {/* LOG TAB */}
         {tab === 'log' && (
-          <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ fontSize: 10, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: 2 }}>
-              quick log — pinned foods
+          <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10, fontWeight: 500 }}>
+                pinned foods
+              </div>
+              <PinnedFoods />
             </div>
-            <PinnedFoods onUpdate={forceRefresh} key={`pinned-${refresh}`} />
-            <div style={{ fontSize: 10, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: 2 }}>
-              today's meals
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10, fontWeight: 500 }}>
+                today's meals
+              </div>
+              <MealLog />
             </div>
-            <MealLog onUpdate={forceRefresh} key={`meals-${refresh}`} />
           </div>
         )}
 
+        {/* STATS TAB */}
         {tab === 'stats' && (
           <div style={{ maxWidth: 480, margin: '0 auto' }}>
-            <WeeklyReport key={refresh} />
+            <WeeklyReport />
           </div>
         )}
 
+        {/* BODY TAB */}
         {tab === 'body' && (
           <div style={{ maxWidth: 480, margin: '0 auto' }}>
-            <BodyProgress key={refresh} />
+            <BodyProgress />
           </div>
         )}
       </div>

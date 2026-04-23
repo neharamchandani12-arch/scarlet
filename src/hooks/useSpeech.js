@@ -6,27 +6,81 @@ export function useSpeech() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const recognitionRef = useRef(null);
   const synthRef = useRef(window.speechSynthesis);
+  const silenceTimerRef = useRef(null);
+  const finalTranscriptRef = useRef('');
+  const onResultCallbackRef = useRef(null);
+  const onEndCallbackRef = useRef(null);
+
+  const clearSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  };
 
   const startListening = useCallback((onResult, onEnd) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { onEnd?.('Speech recognition not supported'); return; }
 
+    onResultCallbackRef.current = onResult;
+    onEndCallbackRef.current = onEnd;
+    finalTranscriptRef.current = '';
+
+    synthRef.current.cancel();
+
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      onResult(transcript);
+      clearSilenceTimer();
+
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      if (finalTranscript) {
+        finalTranscriptRef.current += finalTranscript;
+      }
+
+      // Start silence timer — if no new speech for 2s, submit
+      silenceTimerRef.current = setTimeout(() => {
+        const full = (finalTranscriptRef.current + interimTranscript).trim();
+        if (full) {
+          recognition.stop();
+          onResultCallbackRef.current?.(full);
+        }
+      }, 2000);
     };
+
     recognition.onend = () => {
+      clearSilenceTimer();
       setIsListening(false);
-      onEnd?.();
+      // If we have accumulated text that wasn't submitted yet
+      const remaining = finalTranscriptRef.current.trim();
+      if (remaining) {
+        onResultCallbackRef.current?.(remaining);
+        finalTranscriptRef.current = '';
+      }
+      onEndCallbackRef.current?.();
     };
+
     recognition.onerror = (e) => {
+      clearSilenceTimer();
       setIsListening(false);
-      onEnd?.();
+      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        onEndCallbackRef.current?.();
+      }
     };
 
     recognitionRef.current = recognition;
@@ -35,23 +89,45 @@ export function useSpeech() {
   }, []);
 
   const stopListening = useCallback(() => {
+    clearSilenceTimer();
     recognitionRef.current?.stop();
     setIsListening(false);
   }, []);
 
   const speak = useCallback((text, onEnd) => {
     synthRef.current.cancel();
-    const clean = text.replace(/\{[^}]+\}/g, '').replace(/[*_`#]/g, '').trim();
+    const clean = text
+      .replace(/\{[^}]+\}/g, '')
+      .replace(/[*_`#\[\]]/g, '')
+      .replace(/https?:\/\/\S+/g, '')
+      .trim();
     if (!clean) { onEnd?.(); return; }
 
     const utterance = new SpeechSynthesisUtterance(clean);
     utterance.volume = getVolume();
-    utterance.rate = 1.05;
-    utterance.pitch = 1.1;
+    utterance.rate = 0.92;
+    utterance.pitch = 1.15;
+
+    const setVoice = () => {
+      const voices = synthRef.current.getVoices();
+      const preferred = voices.find(v =>
+        v.name.includes('Samantha') ||
+        v.name.includes('Karen') ||
+        v.name.includes('Moira') ||
+        v.name.includes('Tessa') ||
+        v.name.includes('Google UK English Female') ||
+        v.name.includes('Victoria') ||
+        (v.lang === 'en-US' && v.name.toLowerCase().includes('female'))
+      ) || voices.find(v => v.lang.startsWith('en'));
+      if (preferred) utterance.voice = preferred;
+    };
 
     const voices = synthRef.current.getVoices();
-    const preferred = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria') || v.name.includes('Karen'));
-    if (preferred) utterance.voice = preferred;
+    if (voices.length > 0) {
+      setVoice();
+    } else {
+      synthRef.current.addEventListener('voiceschanged', setVoice, { once: true });
+    }
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => { setIsSpeaking(false); onEnd?.(); };
