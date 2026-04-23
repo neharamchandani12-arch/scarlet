@@ -141,6 +141,7 @@ export default function App() {
         } else {
           setPendingFood(mealSummary);
           updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display.trim(), foodData: { ...mealSummary, isFoodData: true } }));
+          speak(`${parsed.name}. Total ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
         }
       } else if (parsed.isFoodData) {
         const display = `${parsed.name}: ${parsed.calories} kcal · ${parsed.protein}g protein${parsed.notes ? '\n' + parsed.notes : ''}`;
@@ -155,21 +156,22 @@ export default function App() {
         } else {
           setPendingFood(parsed);
           updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display, foodData: parsed }));
+          speak(`${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein. Tap to log.`);
         }
       } else if (parsed.isRecipeAction === 'save') {
         saveRecipe({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
         const reply = `Recipe saved: ${parsed.name} — ${parsed.calories} kcal · ${parsed.protein || 0}g protein. Tap it above to log anytime.`;
         updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        if (fromVoice) speak(`Saved ${parsed.name} as a recipe.`);
+        speak(`Saved ${parsed.name} as a recipe.`);
       } else if (parsed.isRecipeAction === 'delete') {
         deleteRecipe(parsed.name);
         const reply = `Deleted "${parsed.name}" recipe.`;
         updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        if (fromVoice) speak(reply);
+        speak(reply);
       } else {
         const cleanText = fullText.replace(/\{[\s\S]*?\}/g, '').replace(/[*_`#]/g, '').trim();
         updateLastMessage(prev => ({ ...prev, displayText: cleanText || prev.displayText }));
-        if (fromVoice && cleanText) speak(cleanText);
+        if (cleanText) speak(cleanText);
       }
     } catch (err) {
       setTyping(false);
