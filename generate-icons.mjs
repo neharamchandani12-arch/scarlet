@@ -1,0 +1,15 @@
+import fs from 'fs';
+
+// Create a minimal valid PNG (1x1 pink pixel) as placeholder icon
+// We'll use an SVG-based approach via the browser instead
+const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" fill="#050508"/>
+  <circle cx="96" cy="96" r="90" fill="none" stroke="#ff2d78" stroke-width="2"/>
+  <text x="96" y="76" text-anchor="middle" font-family="monospace" font-size="14" fill="#ff2d78" letter-spacing="4">SCARLET</text>
+  <ellipse cx="76" cy="100" rx="8" ry="7" fill="#ff2d78"/>
+  <ellipse cx="116" cy="100" rx="8" ry="7" fill="#ff2d78"/>
+  <path d="M72 120 Q96 132 120 120" stroke="#ff2d78" stroke-width="2" fill="none"/>
+</svg>`;
+
+fs.writeFileSync('public/icon.svg', svgIcon);
+console.log('SVG icon written');

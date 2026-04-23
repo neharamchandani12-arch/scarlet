@@ -1,0 +1,288 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --neon: #ff2d78;
+  --neon2: #00fff7;
+  --neon3: #bf00ff;
+  --bg: #050508;
+  --bg2: #0a0a12;
+  --bg3: #0f0f1a;
+  --text: #e0e0f0;
+  --text2: #8888aa;
+  --border: rgba(255, 45, 120, 0.3);
+  --glow: 0 0 10px var(--neon), 0 0 20px var(--neon), 0 0 40px var(--neon);
+  --glow2: 0 0 10px var(--neon2), 0 0 20px var(--neon2);
+  --card-bg: rgba(10, 10, 20, 0.85);
+}
+
+[data-theme="cyan"] {
+  --neon: #00fff7;
+  --neon2: #ff2d78;
+  --border: rgba(0, 255, 247, 0.3);
+  --glow: 0 0 10px var(--neon), 0 0 20px var(--neon), 0 0 40px var(--neon);
+}
+
+[data-theme="purple"] {
+  --neon: #bf00ff;
+  --neon2: #00fff7;
+  --border: rgba(191, 0, 255, 0.3);
+  --glow: 0 0 10px var(--neon), 0 0 20px var(--neon), 0 0 40px var(--neon);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+.scanlines {
+  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+}
+
+.particles-bg {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  overflow: hidden;
+}
+
+.particle {
+  position: absolute;
+  width: 2px; height: 2px;
+  background: var(--neon);
+  border-radius: 50%;
+  animation: float linear infinite;
+  opacity: 0.4;
+}
+
+@keyframes float {
+  0% { transform: translateY(100vh) translateX(0); opacity: 0; }
+  10% { opacity: 0.4; }
+  90% { opacity: 0.4; }
+  100% { transform: translateY(-10px) translateX(20px); opacity: 0; }
+}
+
+.glitch {
+  position: relative;
+  animation: glitch 4s infinite;
+}
+
+.glitch::before, .glitch::after {
+  content: attr(data-text);
+  position: absolute; left: 0; top: 0;
+  width: 100%; height: 100%;
+}
+
+.glitch::before {
+  color: var(--neon2);
+  animation: glitch-1 4s infinite;
+  clip-path: polygon(0 20%, 100% 20%, 100% 40%, 0 40%);
+}
+
+.glitch::after {
+  color: var(--neon3);
+  animation: glitch-2 4s infinite;
+  clip-path: polygon(0 60%, 100% 60%, 100% 80%, 0 80%);
+}
+
+@keyframes glitch {
+  0%, 90%, 100% { transform: translate(0); }
+  92% { transform: translate(-2px, 1px); }
+  94% { transform: translate(2px, -1px); }
+  96% { transform: translate(-1px, 2px); }
+}
+
+@keyframes glitch-1 {
+  0%, 90%, 100% { transform: translate(0); }
+  92% { transform: translate(3px, 0); }
+  94% { transform: translate(-3px, 0); }
+}
+
+@keyframes glitch-2 {
+  0%, 90%, 100% { transform: translate(0); }
+  92% { transform: translate(-3px, 0); }
+  94% { transform: translate(3px, 0); }
+}
+
+.neon-text {
+  color: var(--neon);
+  text-shadow: var(--glow);
+}
+
+.neon-border {
+  border: 1px solid var(--border);
+  box-shadow: inset 0 0 10px rgba(255, 45, 120, 0.05), 0 0 10px rgba(255, 45, 120, 0.1);
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 20px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,45,120,0.03);
+}
+
+button {
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  transition: all 0.2s;
+}
+
+.btn-neon {
+  background: transparent;
+  border: 1px solid var(--neon);
+  color: var(--neon);
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+
+.btn-neon:hover {
+  background: var(--neon);
+  color: var(--bg);
+  box-shadow: var(--glow);
+}
+
+.btn-neon:active { transform: scale(0.97); }
+
+.btn-solid {
+  background: var(--neon);
+  border: none;
+  color: var(--bg);
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: var(--glow);
+  transition: all 0.2s;
+}
+
+.btn-solid:hover { filter: brightness(1.2); }
+.btn-solid:active { transform: scale(0.97); }
+
+.typing-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: var(--neon);
+  border-radius: 50%;
+  margin: 0 2px;
+  animation: blink 1s infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px var(--neon); }
+  50% { box-shadow: var(--glow); }
+}
+
+@keyframes eye-glow {
+  0%, 100% { filter: drop-shadow(0 0 4px var(--neon)); }
+  50% { filter: drop-shadow(0 0 12px var(--neon)) drop-shadow(0 0 24px var(--neon)); }
+}
+
+.speaking .avatar-eyes { animation: eye-glow 0.5s ease-in-out infinite; }
+
+.waveform {
+  display: flex; align-items: center; gap: 3px; height: 40px;
+}
+
+.waveform-bar {
+  width: 4px;
+  background: var(--neon);
+  border-radius: 2px;
+  animation: wave 1s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--neon);
+}
+
+@keyframes wave {
+  0%, 100% { height: 6px; }
+  50% { height: 32px; }
+}
+
+input, textarea {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  border-radius: 4px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input:focus, textarea:focus {
+  border-color: var(--neon);
+  box-shadow: 0 0 10px rgba(255,45,120,0.2);
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px;
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-btn.active {
+  color: var(--neon);
+  border-bottom-color: var(--neon);
+  text-shadow: 0 0 10px var(--neon);
+}
+
+.macro-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.slide-up { animation: slide-up 0.3s ease; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in { animation: fade-in 0.3s ease; }
