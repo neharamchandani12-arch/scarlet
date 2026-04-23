@@ -111,13 +111,11 @@ export default function App() {
     try {
       const apiMessages = history.map(m => ({ role: m.role, content: m.content }));
       let fullText = '';
-      let speechStarted = false;
 
       await askScarlet(apiMessages, (delta, full) => {
         fullText = full;
         const parsed = parseFoodResponse(full);
-        // During streaming: hide text if it looks like it's building toward JSON (avoids showing preamble)
-        const streamDisplay = parsed.isFoodData || parsed.isMealData
+        const streamDisplay = (parsed.isFoodData || parsed.isMealData)
           ? null
           : getStreamDisplayText(full) ?? full;
         updateLastMessage(prev => ({
@@ -125,55 +123,55 @@ export default function App() {
           content: full,
           displayText: streamDisplay ?? prev.displayText ?? '',
         }));
-
-        // Auto-speak after first complete sentence
-        if (fromVoice && !speechStarted && streamDisplay && streamDisplay.length > 30) {
-          const sentences = streamDisplay.match(/[^.!?]+[.!?]/g);
-          if (sentences && sentences.length >= 1) {
-            speechStarted = true;
-            speak(streamDisplay);
-          }
-        }
       });
 
       setTyping(false);
       const parsed = parseFoodResponse(fullText);
 
       if (parsed.isMealData) {
-        // Multi-item meal
         const mealSummary = { name: parsed.name, calories: parsed.calories, protein: parsed.protein };
-        setPendingFood(mealSummary);
-        const breakdown = parsed.items?.map(i => `${i.name} ${i.grams}g — ${i.calories} kcal, ${i.protein}g protein`).join('\n') || '';
-        const display = `${breakdown}\n\nTotal: ${parsed.calories} kcal · ${parsed.protein}g protein`;
-        updateLastMessage(prev => ({
-          ...prev, content: fullText, displayText: display,
-          foodData: { ...mealSummary, isFoodData: true, breakdown: parsed.items },
-        }));
-        if (fromVoice) speak(`Total: ${parsed.calories} calories, ${parsed.protein} grams protein. Want me to log it?`);
+        const breakdown = parsed.items?.map(i => `${i.name}${i.grams ? ' ' + i.grams + 'g' : ''} — ${i.calories} kcal · ${i.protein}g protein`).join('\n') || '';
+        const display = `${breakdown}\n\nTotal: ${parsed.calories} kcal · ${parsed.protein}g protein\n${parsed.notes || ''}`;
+        if (fromVoice) {
+          addMeal(mealSummary);
+          addMicroplastics(mealSummary.name, estimateMicroplastics(mealSummary.name));
+          addPinned(mealSummary);
+          setMicroplastics(getMicroplasticsToday());
+          checkAndUpdateStreak();
+          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display.trim() + '\n\n✓ Logged', foodData: { ...mealSummary, isFoodData: true, logged: true } }));
+          speak(`Logged. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
+        } else {
+          setPendingFood(mealSummary);
+          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display.trim(), foodData: { ...mealSummary, isFoodData: true } }));
+        }
       } else if (parsed.isFoodData) {
-        setPendingFood(parsed);
-        updateLastMessage(prev => ({
-          ...prev,
-          content: fullText,
-          displayText: `${parsed.name}: ${parsed.calories} kcal, ${parsed.protein}g protein`,
-          foodData: parsed,
-        }));
-        if (fromVoice) speak(`${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein. Want me to log it?`);
+        const display = `${parsed.name}: ${parsed.calories} kcal · ${parsed.protein}g protein${parsed.notes ? '\n' + parsed.notes : ''}`;
+        if (fromVoice) {
+          addMeal({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
+          addMicroplastics(parsed.name, estimateMicroplastics(parsed.name));
+          addPinned({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
+          setMicroplastics(getMicroplasticsToday());
+          checkAndUpdateStreak();
+          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display + '\n\n✓ Logged', foodData: { ...parsed, logged: true } }));
+          speak(`Logged ${parsed.name}. ${parsed.calories} calories, ${parsed.protein} grams protein.`);
+        } else {
+          setPendingFood(parsed);
+          updateLastMessage(prev => ({ ...prev, content: fullText, displayText: display, foodData: parsed }));
+        }
       } else if (parsed.isRecipeAction === 'save') {
         saveRecipe({ name: parsed.name, calories: parsed.calories, protein: parsed.protein || 0 });
-        const reply = `Saved "${parsed.name}" as a recipe.`;
+        const reply = `Recipe saved: ${parsed.name} — ${parsed.calories} kcal · ${parsed.protein || 0}g protein. Tap it above to log anytime.`;
         updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        if (fromVoice && !speechStarted) speak(reply);
+        if (fromVoice) speak(`Saved ${parsed.name} as a recipe.`);
       } else if (parsed.isRecipeAction === 'delete') {
         deleteRecipe(parsed.name);
-        const reply = `Deleted recipe "${parsed.name}".`;
+        const reply = `Deleted "${parsed.name}" recipe.`;
         updateLastMessage(prev => ({ ...prev, content: reply, displayText: reply }));
-        if (fromVoice && !speechStarted) speak(reply);
+        if (fromVoice) speak(reply);
       } else {
-        // Clean final text — strip any JSON fragments or markdown
-        const cleanText = fullText.replace(/\{[\s\S]*\}/, '').replace(/[*_`#]/g, '').trim();
+        const cleanText = fullText.replace(/\{[\s\S]*?\}/g, '').replace(/[*_`#]/g, '').trim();
         updateLastMessage(prev => ({ ...prev, displayText: cleanText || prev.displayText }));
-        if (fromVoice && !speechStarted && cleanText) speak(cleanText);
+        if (fromVoice && cleanText) speak(cleanText);
       }
     } catch (err) {
       setTyping(false);
@@ -308,8 +306,8 @@ export default function App() {
                   className="btn-neon"
                   style={{ fontSize: 10, padding: '5px 10px', whiteSpace: 'nowrap' }}
                   onClick={() => setTab('body')}
-                  title="Add progress photo"
-                >📸 Photos</button>
+                  title="Body analysis & progress photos"
+                >📸 Body Analysis</button>
               </div>
               <div style={{ flex: 1 }}>
                 <CaloriesRemaining />

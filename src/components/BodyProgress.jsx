@@ -1,75 +1,106 @@
 import { useState, useRef } from 'react';
 import { analyzeBodyPhoto } from '../hooks/useGroq';
 
-const CLOUDINARY_CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD;
-const CLOUDINARY_UPLOAD_PRESET = 'scarlet_progress';
+function resizeToBase64(file, maxDim = 800, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not load image')); };
+    img.src = url;
+  });
+}
+
+function loadPhotos() {
+  try { return JSON.parse(localStorage.getItem('scarlet_progress_photos') || '[]'); }
+  catch { return []; }
+}
+
+function savePhotos(photos) {
+  try {
+    localStorage.setItem('scarlet_progress_photos', JSON.stringify(photos));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default function BodyProgress() {
-  const [photos, setPhotos] = useState(() => {
-    const raw = localStorage.getItem('scarlet_progress_photos');
-    return raw ? JSON.parse(raw) : [];
-  });
+  const [photos, setPhotos] = useState(loadPhotos);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
-  async function uploadPhoto(file) {
+  async function addPhoto(file) {
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
-        method: 'POST', body: formData,
-      });
-      const data = await res.json();
-      if (!data.secure_url) throw new Error(data.error?.message || 'Upload failed');
-      const newPhoto = { url: data.secure_url, date: new Date().toISOString().split('T')[0], id: Date.now() };
+      const dataUrl = await resizeToBase64(file);
+      const newPhoto = { url: dataUrl, date: new Date().toISOString().split('T')[0], id: Date.now() };
       const updated = [newPhoto, ...photos];
-      setPhotos(updated);
-      localStorage.setItem('scarlet_progress_photos', JSON.stringify(updated));
+      const ok = savePhotos(updated);
+      if (!ok) {
+        // Storage full — keep only last 5
+        const trimmed = [newPhoto, ...photos.slice(0, 4)];
+        savePhotos(trimmed);
+        setPhotos(trimmed);
+        alert('Storage almost full — keeping your 5 most recent photos.');
+      } else {
+        setPhotos(updated);
+      }
 
       setAnalyzing(true);
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const b64 = e.target.result.split(',')[1];
-          const result = await analyzeBodyPhoto(b64);
-          setAnalysis(result);
-        } catch { setAnalysis('Could not analyze photo.'); }
-        setAnalyzing(false);
-      };
-      reader.readAsDataURL(file);
+      setUploading(false);
+      try {
+        const b64 = dataUrl.split(',')[1];
+        const result = await analyzeBodyPhoto(b64);
+        setAnalysis(result);
+      } catch {
+        setAnalysis('Could not analyze photo.');
+      }
+      setAnalyzing(false);
     } catch (err) {
-      alert('Upload failed: ' + err.message);
+      setUploading(false);
+      alert('Could not load photo: ' + err.message);
     }
-    setUploading(false);
   }
 
   function deletePhoto(id) {
     const updated = photos.filter(p => p.id !== id);
     setPhotos(updated);
-    localStorage.setItem('scarlet_progress_photos', JSON.stringify(updated));
+    savePhotos(updated);
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px' }}>
+      {/* Section header */}
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--neon)', marginBottom: 4 }}>Body Analysis</div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.5 }}>
+          Upload progress photos and Scarlet will give you an honest assessment of your physique over time.
+        </div>
+      </div>
+
       {/* Upload CTA */}
       <div className="card" style={{ padding: 20, textAlign: 'center' }}>
-        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12, lineHeight: 1.5 }}>
-          Upload a progress photo — Scarlet will give an honest assessment of your physique.
-        </div>
         <button
           className="btn-solid"
           style={{ width: '100%', padding: 14, fontSize: 15 }}
           onClick={() => fileRef.current.click()}
-          disabled={uploading}
+          disabled={uploading || analyzing}
         >
-          {uploading ? 'Uploading...' : '📸 Add Progress Photo'}
+          {uploading ? 'Loading photo...' : analyzing ? 'Analyzing...' : '📸 Add Progress Photo'}
         </button>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-          onChange={e => { if (e.target.files[0]) uploadPhoto(e.target.files[0]); }} />
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+          onChange={e => { if (e.target.files[0]) { addPhoto(e.target.files[0]); e.target.value = ''; } }} />
       </div>
 
       {/* Scarlet's analysis */}
@@ -125,7 +156,7 @@ export default function BodyProgress() {
           </div>
         </div>
       ) : (
-        !uploading && (
+        !uploading && !analyzing && (
           <div style={{ textAlign: 'center', color: 'var(--text2)', fontSize: 13, padding: 20 }}>
             No photos yet. Add your first one above.
           </div>
